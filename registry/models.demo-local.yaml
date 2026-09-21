@@ -1,0 +1,84 @@
+# Model registry — demo-local profile (RTX 5060, 8 GB usable ~7.3 GB headless)
+#
+# NOTHING IS PULLED AUTOMATICALLY. Every entry is `enabled: false` until a human
+# approves the download by name, quantisation and VRAM cost. Tags below are
+# CANDIDATES and must be verified against the runtime before enabling.
+#
+# Budget check (ADR-0001 Gap 1):
+#   reasoning 2.6 + coding 1.9 + embedding 0.3 + KV ~1.5  =  ~6.3 GB of ~7.3 GB
+# Vision does not co-reside; it swaps, and it runs at INGEST not in the agent loop.
+
+models:
+  - id: reason-general
+    enabled: false
+    tag: "qwen3:4b"                    # CANDIDATE — verify tag before pull
+    runtime: ollama
+    modalities: [text]
+    capabilities: [reasoning, planning, tool_calling, structured_output, drafting]
+    context_window: 32768
+    vram_gb: 2.6                       # ESTIMATE — measure on the card (M1 task 1)
+    quality_tier: standard
+    classification_ceiling: restricted
+    resident: true
+    fallback: [reason-large]
+
+  - id: reason-code
+    enabled: false
+    tag: "qwen2.5-coder:3b"            # CANDIDATE
+    runtime: ollama
+    modalities: [text]
+    capabilities: [code_generation, tool_calling, structured_output]
+    context_window: 32768
+    vram_gb: 1.9
+    quality_tier: standard
+    classification_ceiling: restricted
+    resident: true
+    fallback: [reason-general]
+
+  - id: reason-large
+    enabled: false
+    tag: "qwen2.5:7b"                  # CANDIDATE — resident set B, evicts vision
+    runtime: ollama
+    modalities: [text]
+    capabilities: [reasoning, planning, tool_calling, structured_output, drafting]
+    context_window: 32768
+    vram_gb: 4.4
+    quality_tier: high
+    classification_ceiling: restricted
+    resident: false
+    swap_cost_s: null                  # MEASURE (M1 task 2) — the router scores with this
+    fallback: [reason-general]
+
+  - id: vision-doc
+    enabled: false
+    tag: "granite3.2-vision:2b"        # CANDIDATE — IBM Granite Vision, document-oriented
+    runtime: ollama
+    modalities: [text, image]
+    capabilities: [vision, ocr_assist, figure_reading, stamped_field_extraction]
+    context_window: 16384
+    vram_gb: 1.8
+    quality_tier: standard
+    classification_ceiling: restricted
+    resident: false                    # swapped, at ingest time only
+    swap_cost_s: null                  # MEASURE
+    fallback: []
+
+  - id: embed-text
+    enabled: false
+    tag: "nomic-embed-text"            # CANDIDATE
+    runtime: ollama                    # may move to app-box CPU; see below
+    modalities: [text]
+    capabilities: [embedding]
+    context_window: 8192
+    vram_gb: 0.3
+    quality_tier: standard
+    classification_ceiling: restricted
+    resident: true
+    fallback: []
+    notes: |
+      If the resident-set measurement comes in over budget, this is the first thing
+      to move to app-box CPU. That is the point of the two-box split (ADR-0001 Q2).
+
+# Reranking is NOT in this registry. It runs as a CPU cross-encoder on the app box
+# over the top ~20 candidates, contends with nothing, and costs a few hundred ms.
+# See packages/knowledge/AGENTS.md.

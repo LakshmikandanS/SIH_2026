@@ -1,0 +1,22 @@
+[project]
+name = "citadel-contracts"
+version = "0.0.0"
+description = "Shared vocabulary: domain types, envelopes, event registry, classification lattice, receipts."
+requires-python = ">=3.12"
+
+# The dependency rule from the root AGENTS.md, declared so it is enforced at
+# install time and not only by a test.
+# MUST NOT depend on anything internal. Zero inward dependencies is what
+# makes this package portable; tests/structural enforces it.
+dependencies = []
+
+# uv_build ships with uv, so building this package needs no network.
+# setuptools would have to be fetched from PyPI for every build, which
+# breaks the offline-build requirement (handoff 3.2). See PLAN-M0 task 14.
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+
+[tool.uv.sources]
+

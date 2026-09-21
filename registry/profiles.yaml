@@ -1,0 +1,83 @@
+# Hardware profiles. Selected by CITADEL_PROFILE.
+# See docs/adr/0002-*.md and docs/adr/0003-*.md
+#
+# A profile is a registry selection, not a code path. There is no
+# `if profile == "hpc-eval"` anywhere outside the gateway's provider construction.
+#
+# The names carry the ROLE on purpose. ADR-0002's original names (`dev-8gb`,
+# `cluster`) read as "the scratch one" and "the real one" — exactly backwards,
+# and a misreading that would sink acceptance target E.
+
+profiles:
+
+  demo-local:
+    role: THE DEMONSTRATION. Sovereign. Target E lives here. Real corpus.
+    description: RTX 5060, 8 GB, sm_120, single box. What the problem statement asks for.
+    models: models.demo-local.yaml
+    inference:
+      provider: ollama
+      # ONE BOX (ADR-0004). Ollama runs on the same machine as everything else.
+      # From a container reaching an Ollama on the host, use host.docker.internal.
+      # The two-box split survives as ops/compose/two-box.yml and changes only
+      # this URL -- which is the whole point of holding it here.
+      endpoint: http://host.docker.internal:11434
+      endpoint_source: static
+    residency:
+      # Ollama owns the admission queue. Citadel drives it, does not duplicate it.
+      strategy: runtime_managed
+      max_loaded_models: 3
+      keep_alive_resident: "-1"     # pin the resident set
+      keep_alive_transient: "5m"
+    gpu_admission: 2                # concurrent model calls; see packages/runtime
+    cpu_admission: 3                # concurrent ingestion/OCR; ADR-0004
+    classification_ceiling: restricted
+    sovereign: true
+    single_box: true
+    notes: |
+      The tighter constraint, and therefore the profile the code is designed to.
+      Vision swaps; reasoning and coding stay resident. See ADR-0002 §5.
+
+      The problem statement asks for exactly this: "demonstrable on a single
+      workstation or server with a mid-range GPU". This is not a fallback.
+
+      ONE BOX (ADR-0004). Two admission caps, not one: the GPU is scarce, and so
+      now is the CPU, because OCR and embedding share the machine with Ollama.
+      A bulk ingest across every core will starve the API and make the UI look
+      hung -- during a demonstration, at the worst possible moment.
+
+      The payoff: target E can be demonstrated by unplugging the network cable
+      and running the whole flow. No instrument to trust. Two boxes made that
+      impossible.
+
+  hpc-eval:
+    role: MEASURING INSTRUMENT. Never sovereign, never confidential, never on the demo path.
+    description: University HPC, NVIDIA DGX-H200 via SLURM. Evaluation and benchmarking only.
+    models: models.hpc-eval.yaml
+    inference:
+      provider: vllm
+      # SLURM allocates a different compute node per job, so this is written by
+      # the sbatch script at allocation time. See ops/hpc/README.md.
+      endpoint: null
+      endpoint_source: slurm_allocation
+      endpoint_file: "${CITADEL_HPC_ENDPOINT_FILE}"
+    residency:
+      strategy: all_resident
+      tensor_parallel_size: 2       # ~250 GB allocation ≈ 2 × H200 (141 GB each)
+    gpu_admission: 16
+    cpu_admission: 16
+    classification_ceiling: public  # <-- ENFORCED AT INGEST. Not a note; a lattice check.
+    sovereign: false
+    notes: |
+      University-administered, shared with other students and faculty, reached over
+      SSH. ADR-0003 settles what that means: acceptance target E is NEVER
+      demonstrated here, and no confidential material is ever staged to cluster
+      storage.
+
+      `classification_ceiling: public` is the mechanical form of that rule. Ingest
+      refuses anything above it, using the same lattice comparison that guards tool
+      invocation. A deployment on this profile CANNOT hold restricted material even
+      if someone tries.
+
+      Usable nodes: DGX-H200 (x86_64, Hopper sm_90) and the x86 compute nodes.
+      AVOID: AC922 / IC922 (ppc64le — vLLM needs a from-source build with patched
+      LLVM/Triton/PyTorch) and Tesla K80 (Kepler sm_37, dropped by current CUDA).

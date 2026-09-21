@@ -1,0 +1,50 @@
+# Event vocabulary — OPEN by construction.
+#
+# The prototype closed this at sixteen types and rejected anything else, which is one
+# of the named failure modes in the root AGENTS.md. Registration, never a closed enum.
+#
+# Adding an event type is an entry here. It is never a code change, and a type absent
+# from this file is an unregistered-event error at startup, not a silent drop.
+
+events:
+  # --- governance ---
+  - { name: policy.decision,      severity: info,    audit: true,  trace: true }
+  - { name: policy.denial,        severity: warning, audit: true,  trace: true }
+  - { name: identity.verified,    severity: info,    audit: true,  trace: false }
+  - { name: identity.discarded,   severity: info,    audit: true,  trace: false }
+  - { name: receipt.issued,       severity: info,    audit: true,  trace: true }
+  - { name: receipt.rejected,     severity: warning, audit: true,  trace: true }
+
+  # --- ingest & knowledge ---
+  - { name: document.ingested,    severity: info,    audit: true,  trace: true }
+  - { name: document.rejected,    severity: warning, audit: true,  trace: true }
+  - { name: retrieval.performed,  severity: info,    audit: false, trace: true }
+  - { name: retrieval.denied_doc, severity: info,    audit: true,  trace: true }
+
+  # --- model & routing ---
+  - { name: model.routed,         severity: info,    audit: true,  trace: true }
+  - { name: model.fallback_used,  severity: warning, audit: true,  trace: true }
+  - { name: model.degraded,       severity: warning, audit: true,  trace: true }
+  - { name: model.swapped,        severity: info,    audit: false, trace: true }
+
+  # --- task runtime ---
+  - { name: task.submitted,       severity: info,    audit: true,  trace: true }
+  - { name: task.planned,         severity: info,    audit: false, trace: true }
+  - { name: task.replanned,       severity: info,    audit: false, trace: true }
+  - { name: task.step_completed,  severity: info,    audit: false, trace: true }
+  - { name: task.budget_exceeded, severity: warning, audit: true,  trace: true }
+  - { name: task.cancelled,       severity: info,    audit: true,  trace: true }
+
+  # --- deliverables ---
+  - { name: artifact.generated,   severity: info,    audit: true,  trace: true }
+  - { name: artifact.verified,    severity: info,    audit: true,  trace: true }
+  - { name: artifact.failed_tier, severity: warning, audit: true,  trace: true }
+  - { name: approval.requested,   severity: info,    audit: true,  trace: true }
+  - { name: approval.accepted,    severity: info,    audit: true,  trace: true }
+  - { name: approval.rejected,    severity: info,    audit: true,  trace: true }
+  - { name: artifact.released,    severity: info,    audit: true,  trace: true }
+
+  # --- sovereignty ---
+  - { name: egress.attempt,       severity: warning, audit: true,  trace: true }
+  - { name: egress.blocked,       severity: warning, audit: true,  trace: true }
+  - { name: dns.denied,           severity: warning, audit: true,  trace: true }

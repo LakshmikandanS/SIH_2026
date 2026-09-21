@@ -1,0 +1,56 @@
+# Deliverable templates and their declared placeholders.
+#
+# Verification tier 1 is driven by THIS declaration — never by hardcoded headings.
+# The prototype checked for the literal strings "## Summary", "## Maintenance History"
+# and "## Sources", which tied verification to exactly one document type.
+#
+# v1 templates are CONSTRUCTED (ADR-0001 Q11). Fix the .docx by hand first, as an
+# artefact nobody may simplify; then make the generator match it. A real organisational
+# template must be able to replace a constructed one with no code change.
+
+templates:
+  - id: approval-note
+    format: docx
+    file: templates/approval-note.docx
+    classification_markings: true
+    approval_block: true
+    revision_history: true
+    sections:
+      - { key: subject,        required: true,  type: text }
+      - { key: background,     required: true,  type: rich_text }
+      - { key: findings,       required: true,  type: list,  min_items: 1, cited: true }
+      - { key: analysis,       required: true,  type: rich_text, cited: true }
+      - { key: recommendation, required: true,  type: rich_text }
+      - { key: annexures,      required: false, type: list }
+    grounding:
+      quantitative_claims: must_cite      # verification tier 4
+
+  - id: inspection-summary
+    format: docx
+    file: templates/inspection-summary.docx
+    classification_markings: true
+    approval_block: false
+    revision_history: true
+    sections:
+      - { key: equipment_tag,   required: true,  type: text }
+      - { key: inspection_date, required: true,  type: date }
+      - { key: observations,    required: true,  type: list, min_items: 1, cited: true }
+      - { key: defects,         required: false, type: table, cited: true }
+      - { key: disposition,     required: true,  type: text }
+    grounding:
+      quantitative_claims: must_cite
+
+  - id: calculation-sheet
+    format: xlsx
+    file: templates/calculation-sheet.xlsx
+    classification_markings: true
+    approval_block: true
+    revision_history: false
+    sections:
+      - { key: inputs,     required: true, type: table }
+      - { key: working,    required: true, type: table, cited: true }
+      - { key: result,     required: true, type: value }
+      - { key: references, required: true, type: list }
+    grounding:
+      quantitative_claims: must_cite
+      derived_value_tolerance: 0.001      # see packages/deliverables — grounding rules

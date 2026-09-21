@@ -1,0 +1,9 @@
+# MOVED -> registry/models.demo-local.yaml
+#
+# Renamed by ADR-0003: the profile names now carry their role. `dev-8gb` and
+# `cluster` read as "the scratch one" and "the real one", which is backwards and
+# is a misreading that would sink acceptance target E.
+#
+# DELETE THIS FILE. It is a tombstone, not a registry. It is comment-only on
+# purpose: anything that loads it gets None and fails loudly, rather than
+# silently running against a stale model set.

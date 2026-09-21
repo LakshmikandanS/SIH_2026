@@ -1,0 +1,154 @@
+# Tool manifest. Tools are declarative plugins discovered from this file.
+#
+# Adding a tool must NEVER require editing the agent loop. If it does, the loop is
+# dispatching on tool names — the named failure mode in the root AGENTS.md.
+#
+# side_effect:  read | write | execute      (drives policy and receipt requirements)
+# classification_ceiling: the highest classification this tool may ever touch
+
+tools:
+  - name: docs.search
+    package: citadel_tools.docs
+    side_effect: read
+    required_capabilities: [retrieval]
+    classification_ceiling: restricted
+    requires_receipt: true            # data boundary
+    schema:
+      type: object
+      required: [query]
+      additionalProperties: false
+      properties:
+        query:  { type: string, minLength: 1 }
+        top_k:  { type: integer, minimum: 1, maximum: 50, default: 10 }
+
+  - name: docs.read
+    package: citadel_tools.docs
+    side_effect: read
+    required_capabilities: [retrieval]
+    classification_ceiling: restricted
+    requires_receipt: true
+    schema:
+      type: object
+      required: [document_id]
+      additionalProperties: false
+      properties:
+        document_id: { type: string }
+        version:     { type: integer, minimum: 1 }
+        page:        { type: integer, minimum: 1 }
+
+  - name: fs.read
+    package: citadel_tools.fs
+    side_effect: read
+    required_capabilities: [workspace]
+    classification_ceiling: internal
+    requires_receipt: false
+    schema:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path: { type: string, description: "Relative to the task workspace root" }
+
+  - name: fs.write
+    package: citadel_tools.fs
+    side_effect: write
+    required_capabilities: [workspace]
+    classification_ceiling: internal
+    requires_receipt: false
+    schema:
+      type: object
+      required: [path, content]
+      additionalProperties: false
+      properties:
+        path:    { type: string }
+        content: { type: string }
+
+  - name: code.run
+    package: citadel_tools.code
+    side_effect: execute
+    required_capabilities: [sandbox]
+    classification_ceiling: internal
+    requires_receipt: true            # sandbox boundary — the actual threat surface
+    schema:
+      type: object
+      required: [source]
+      additionalProperties: false
+      properties:
+        source:     { type: string }
+        timeout_s:  { type: integer, minimum: 1, maximum: 120, default: 30 }
+
+  - name: sheet.read
+    package: citadel_tools.sheet
+    side_effect: read
+    required_capabilities: [workspace]
+    classification_ceiling: internal
+    requires_receipt: false
+    schema:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path:  { type: string }
+        sheet: { type: string }
+
+  - name: sheet.write
+    package: citadel_tools.sheet
+    side_effect: write
+    required_capabilities: [workspace]
+    classification_ceiling: internal
+    requires_receipt: false
+    schema:
+      type: object
+      required: [path, cells]
+      additionalProperties: false
+      properties:
+        path:  { type: string }
+        sheet: { type: string }
+        cells: { type: object }
+
+  - name: vision.extract
+    package: citadel_tools.vision
+    side_effect: read
+    required_capabilities: [vision]
+    classification_ceiling: restricted
+    requires_receipt: true
+    schema:
+      type: object
+      required: [document_id, page]
+      additionalProperties: false
+      properties:
+        document_id: { type: string }
+        page:        { type: integer, minimum: 1 }
+        bbox:        { type: array, items: { type: number }, minItems: 4, maxItems: 4 }
+    notes: |
+      Re-reading a region only. Normal extraction happens at INGEST, not here
+      (ADR-0001 Gap 2). On demo-local this call is budgeted as a model swap.
+
+  - name: doc.generate
+    package: citadel_tools.doc
+    side_effect: write
+    required_capabilities: [doc_generation]
+    classification_ceiling: restricted
+    requires_receipt: true
+    schema:
+      type: object
+      required: [template_id, content]
+      additionalProperties: false
+      properties:
+        template_id: { type: string }
+        content:     { type: object }
+        citations:   { type: array, items: { type: object } }
+
+  - name: calc.evaluate
+    package: citadel_tools.calc
+    side_effect: read
+    required_capabilities: []
+    classification_ceiling: internal
+    requires_receipt: false
+    schema:
+      type: object
+      required: [expression]
+      additionalProperties: false
+      properties:
+        expression: { type: string }
+    notes: Retains displayable working. The working is part of the result, not a log line.
