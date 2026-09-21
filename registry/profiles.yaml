@@ -30,7 +30,7 @@ profiles:
       keep_alive_transient: "5m"
     gpu_admission: 2                # concurrent model calls; see packages/runtime
     cpu_admission: 3                # concurrent ingestion/OCR; ADR-0004
-    classification_ceiling: restricted
+    classification_ceiling: confidential   # top of the lattice: the sovereign box has no cap below CONFIDENTIAL (AGENTS.md invariant 11)
     sovereign: true
     single_box: true
     notes: |

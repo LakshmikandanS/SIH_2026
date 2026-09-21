@@ -1,9 +1,9 @@
 # AGENTS.md — Citadel
 
-Read this file completely before writing any code. Then read the four ADRs in
+Read this file completely before writing any code. Then read the five ADRs in
 `docs/adr/` — 0001 founding decisions, 0002 hardware profiles and runtime, 0003 what the
-HPC cluster is and is not for, 0004 one box. Then read the `AGENTS.md` in the package you
-are about to touch. Do not skip to the code.
+HPC cluster is and is not for, 0004 one box, 0005 the WSL2 execution environment. Then read
+the `AGENTS.md` in the package you are about to touch. Do not skip to the code.
 
 ---
 
@@ -194,12 +194,44 @@ and a registry entry, never an assertion.
 
 ## Current state
 
-M0 has not started. The repository is a skeleton: this file, the ADRs, the registries and
-the plan. **Start at `docs/PLAN-M0.md`, task 1.**
+M0 is underway. `citadel_contracts` (`docs/PLAN-M0.md` task 3) is written, ported from the
+prototype per `packages/contracts/AGENTS.md`, and verified: 88 tests pass, `mypy --strict`
+and `ruff check` are both clean. Everything else is still the skeleton this file, the ADRs,
+the registries and the plan describe. **Resume at `docs/PLAN-M0.md`, the next unchecked
+task** (structural test suite, then platform).
+
+### Running tests/mypy/ruff in a network-restricted dev sandbox
+
+If you are working in a cloud dev sandbox where `uv sync` fails resolving the `dev`
+dependency group (`mypy was not found in the package registry... 403 Forbidden`) — that is
+the sandbox's PyPI egress being blocked, not a real dependency problem. Check for
+pre-installed global tools before concluding a package is unavailable:
+
+```
+pytest --version   # and mypy, ruff, black, poetry, pyright -- check `uv tool list`
+```
+
+If they're there (they were, in the sandbox this repo was first built in — `uv tool
+install`, isolated from the workspace venv), they still can't see the workspace's own
+packages or its `pyjwt`/`cryptography`. Point `PYTHONPATH` at both the package's `src/` and
+wherever the sandbox's base Python keeps its pre-baked packages (found with
+`python3 -c "import jwt; print(jwt.__file__)"`), e.g.:
+
+```
+PYTHONPATH="<jwt/cryptography's dist-packages dir>:packages/contracts/src" \
+  pytest packages/contracts/tests -q
+```
+
+This is a fact about *this kind of restricted sandbox*, not about the target demonstration
+machine — the WSL2 box (ADR-0005) has ordinary internet access and `uv sync` there needs
+none of this. Don't let a sandbox workaround leak into `ops/` or the Compose files.
 
 M0 targets `demo-local` only: **one machine**, the RTX 5060 workstation, running
 everything (ADR-0004). `hpc-eval` is M1 work and has no Compose file — it runs under
 Apptainer on SLURM (`ops/hpc/README.md`).
 
-One open question blocks M0 task 12: **what OS is the demonstration machine?** The egress
-ruleset assumes nftables, which is Linux. See ADR-0004.
+**The demonstration machine is Windows with Docker Desktop and WSL2.** The whole stack
+runs inside a dedicated WSL2 distro with Docker Engine installed natively — never inside
+Docker Desktop's own managed WSL2 backend, whose network stack is not one you control. See
+ADR-0005 and `ops/wsl2/README.md`. Verify GPU passthrough (`nvidia-smi` inside the distro)
+before M0 task 12 — that check is called out as blocking in the ADR.

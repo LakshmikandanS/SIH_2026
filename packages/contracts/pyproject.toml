@@ -4,11 +4,14 @@ version = "0.0.0"
 description = "Shared vocabulary: domain types, envelopes, event registry, classification lattice, receipts."
 requires-python = ">=3.12"
 
-# The dependency rule from the root AGENTS.md, declared so it is enforced at
-# install time and not only by a test.
-# MUST NOT depend on anything internal. Zero inward dependencies is what
-# makes this package portable; tests/structural enforces it.
-dependencies = []
+# The dependency rule from the root AGENTS.md: zero inward (Citadel-package)
+# dependencies. That is enforced by tests/structural, not by this list being
+# short -- these two are real, declared runtime dependencies (receipts.py
+# needs both), not internal packages.
+dependencies = [
+    "pyjwt>=2.9,<3",
+    "cryptography>=42,<45",
+]
 
 # uv_build ships with uv, so building this package needs no network.
 # setuptools would have to be fetched from PyPI for every build, which

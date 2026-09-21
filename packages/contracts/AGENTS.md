@@ -6,9 +6,18 @@ lattice, state machines, and signed decision receipts.
 ## The one rule
 
 **Zero inward dependencies.** `citadel_contracts` imports nothing from any other Citadel
-package, and nothing from a third-party library that is not stdlib or `cryptography`.
-This is enforced by `tests/structural/test_contracts_is_self_contained.py`, ported from the
-prototype, which is the reason the prototype's own `contracts/` ports cleanly to here.
+package, and nothing from a third-party library that is not stdlib, `pyjwt` or
+`cryptography`. Checked from two vantage points, exactly as the prototype checked it — the
+two files are not duplicates, neither substitutes for the other:
+
+- `packages/contracts/tests/test_contracts_is_self_contained.py` — package-local, AST-based,
+  provable with `citadel_contracts` as the *only* thing present (this package, pytest,
+  pyjwt, cryptography — no rest of the repo). Ported from the prototype's own file of the
+  same name and role.
+- `tests/structural/test_module_boundaries.py` — the repo-integrated counterpart, walking
+  the real tree from root and wired into CI for every package's dependency rule, not just
+  this one. Contracts' "zero inward" is the strictest case of the general layering rule
+  every package follows; this is where that general check lives (Task 17 — not yet written).
 
 If you need something from `platform` in here, the dependency is backwards: the type
 belongs here and the behaviour belongs there.

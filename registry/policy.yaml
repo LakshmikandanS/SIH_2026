@@ -29,7 +29,7 @@ rules:
     effect: deny
     reason: acl_disjoint_from_department
     when:
-      resource.acl: { disjoint_from: actor.departments }
+      resource.acl: { disjoint_from: actor.department }   # singular -- matches citadel_contracts.domain.User.department: str; evaluator treats the scalar as a singleton set
 
   - id: deny-tool-ceiling
     effect: deny
