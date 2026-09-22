@@ -205,28 +205,57 @@ entry, the source line), for both profiles. Building it found two more registry 
 the same shape as the `classification_ceiling: restricted` one already fixed in
 `profiles.yaml`: `models.demo-local.yaml` and `tools.yaml` both used `restricted`, which
 `citadel_contracts.classification.Classification` has never defined -- fixed in those
-files' own header comments. Postgres migrations and the audit chain (the rest of task 19)
-are not started; no Postgres Python driver is importable in the dev sandbox this was built
-in (see the sandbox note below), so that part's verification strategy is still to be
-decided when work reaches it.
+files' own header comments. Postgres migrations and the audit chain (the rest of task 19,
+`docs/PLAN-M0.md` tasks 5 and 6) are now built and empirically proven, closing task 19.
+`packages/platform/migrations/0001`-`0004` cover the audit chain, identity/tasks/journal,
+artifacts/approvals/registry-state, and pgvector document chunks; `citadel_platform.
+migrations` applies and reverts them via a `psql` subprocess runner (no Postgres Python
+driver needed, so it runs for real in this sandbox). The audit chain is
+`citadel_platform.audit.chain` (pure-Python hashing and `verify()`, unit-tested with an
+in-memory fake and a negative control for every way a chain can be broken) plus
+`citadel_platform.audit.postgres` (the real psycopg writer/reader — type-checked here,
+executable once a driver exists on the target machine). What actually delivers "one
+logical writer" is migration 0001's `BEFORE INSERT` trigger, proven against a real
+Postgres via `psql`/`subprocess` in `packages/platform/tests/test_audit_chain_schema.py`:
+20 concurrent writers produce a gapless, unbroken chain; the app role cannot `UPDATE`/
+`DELETE`; `verify()` catches a row edited after the anti-tamper trigger is disabled. That
+proof caught a real bug on the way: `seq` as `GENERATED ALWAYS AS IDENTITY` is assigned
+*before* a trigger runs and sequences do not block on each other, so two concurrent
+writers could commit in the opposite order from the one they grabbed a `seq` value in —
+confirmed by two genuine broken links under 10-way concurrency. Fixed by dropping
+`IDENTITY` and having the trigger assign `seq` itself, from the same locked read that
+determines `prev_hash`. `test_audit_chain_postgres.py` (the psycopg-driven counterpart)
+and `test_vector_iterative_scan.py` (pgvector's `hnsw.iterative_scan`) are real,
+reviewed, currently-collected-and-honestly-skipped code, gated on a driver and an
+extension this sandbox cannot install — not deleted, not faked; they run on the WSL2
+machine. `scripts/dev-db.sh` (below) is the prerequisite all of this package's Postgres
+tests share.
 
-Combined: 143 tests pass (88 contracts + 30 structural + 25 platform), `mypy --strict` and
-`ruff check` are both clean across every package's `src`/`tests` and `tests/structural`.
-Getting there also fixed two real cross-package tooling gaps that only show up once a
-second package has tests: pytest's default import mode collided on two different
-`tests/` directories both resolving to the bare module name `tests` (fixed by dropping
-`__init__.py` from every `tests/` directory, repo-wide, and running pytest with
-`--import-mode=importlib` instead -- see the comment on `addopts` in root `pyproject.toml`),
-and mypy hit the identical collision under its own module resolution (fixed by listing
-each test module individually in `tool.mypy.overrides`, the same file). The other seven
-packages' `tests/__init__.py` stubs had been left in place when that fix landed --
-inconsistent with the "no `__init__.py` under any `tests/`" invariant it established, and a
-silent reintroduction of the same collision waiting for whichever package's tests are
-written next -- found and deleted while building `scripts/check.sh` below, which is what
-now runs across all nine packages, not just the two with tests today. Everything else is
-still the skeleton this file, the ADRs, the registries and the plan describe. **Resume at
-`docs/PLAN-M0.md`, the next unchecked task** (Postgres migrations and the audit chain,
-finishing task 19).
+Combined: 173 tests pass, 2 skipped (88 contracts + 31 structural + 54 platform),
+`mypy --strict` clean across 51 source files, `ruff check` clean — all with the disposable
+Postgres `scripts/dev-db.sh start` brings up, so the 2 skips are only the psycopg/pgvector
+gaps above, never a missing database. Getting there also fixed three real cross-package
+tooling gaps that only show up once a second package has tests, two now and one earlier:
+pytest's default import mode collided on two different `tests/` directories both resolving
+to the bare module name `tests` (fixed by dropping `__init__.py` from every `tests/`
+directory, repo-wide, and running pytest with `--import-mode=importlib` instead -- see the
+comment on `addopts` in root `pyproject.toml`), mypy hit the identical collision under its
+own module resolution (fixed by listing each test module individually in
+`tool.mypy.overrides`, the same file), and mypy hit the same collision a third time over
+two different `conftest.py` files (`tests/structural/` and a would-be
+`packages/platform/tests/`) -- unfixable by another override, since this time it was two
+*different* files both wanting to be the one module `conftest`, not one file needing
+different settings. Fixed by not using a second `conftest.py` at all:
+`packages/platform/tests/pg_scratch.py` is a plain, uniquely-named module, imported
+explicitly by the tests that need it, with `packages/platform/tests` added to root
+`pyproject.toml`'s `pythonpath` so it resolves. The other seven packages' `tests/__init__.py`
+stubs had been left in place when the first fix landed -- inconsistent with the "no
+`__init__.py` under any `tests/`" invariant it established, and a silent reintroduction of
+the same collision waiting for whichever package's tests are written next -- found and
+deleted while building `scripts/check.sh` below, which is what now runs across all nine
+packages, not just the two with tests today. Everything else is still the skeleton this
+file, the ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md`, the
+next unchecked task** (identity, roles, clearances and ACLs -- task 20).
 
 ### Verifying the repo: `scripts/check.sh`
 
@@ -257,6 +286,15 @@ root (needs package-registry access), or install pytest, mypy and ruff globally.
 fact about *this kind of restricted sandbox*, not about the target demonstration machine —
 the WSL2 box (ADR-0005) has ordinary internet access and `uv sync` there needs none of it.
 Don't let the sandbox branch in `scripts/lib/env.sh` leak into `ops/` or the Compose files.
+
+`packages/platform`'s Postgres-backed tests need a reachable server first:
+`scripts/dev-db.sh start` brings up a disposable, socket-only local one (never
+`ops/compose/`'s containerized Postgres — see that script's own header) and prints the
+`PGHOST`/`PGPORT`/`PGUSER` to export before running `scripts/check.sh` or
+`scripts/test.sh`. Without them, those tests skip cleanly instead of failing red.
+`scripts/dev-db.sh stop` tears it down; `status` reports whether it's up. Same
+root-vs-non-root, try-then-fall-back detection as `scripts/lib/env.sh`, so it runs
+unchanged on this sandbox and on the WSL2 machine.
 
 M0 targets `demo-local` only: **one machine**, the RTX 5060 workstation, running
 everything (ADR-0004). `hpc-eval` is M1 work and has no Compose file — it runs under
