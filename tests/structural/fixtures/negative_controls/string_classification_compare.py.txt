@@ -1,0 +1,13 @@
+# NEGATIVE CONTROL for test_no_string_classification_compare.
+# Classification is compared through Classification.rank()/.exceeds(), never with a
+# raw `<`/`>` on the strings themselves -- "PUBLIC" > "INTERNAL" is true as strings and
+# wrong as a lattice comparison. This file exists so the detector can prove it still
+# catches that edge.
+
+from __future__ import annotations
+
+
+def is_denied(doc, user) -> bool:
+    if doc.classification > user.max_classification:   # forbidden -- raw string compare
+        return True
+    return resource.classification >= task.classification  # forbidden, other operator too

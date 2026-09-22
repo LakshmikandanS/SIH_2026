@@ -54,3 +54,38 @@ line-length = 100
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+# Test functions are `def test_x():`, never `def test_x() -> None:` -- that is pytest's
+# own idiom, not sloppiness, and requiring the annotation on every test function is
+# noise strict mode elsewhere earns its keep by NOT producing. Applies to both test
+# layouts in this repo: packages/*/tests' dotted `tests.test_*` modules (each has an
+# __init__.py, so "tests.*"/"tests" -- a whole-component wildcard -- matches them) and
+# tests/structural's flat `test_*` modules (no package, no __init__.py, so each one
+# resolves as its own bare top-level module name, not a dotted one).
+#
+# mypy's override `module` patterns only allow a WHOLE component to be `*`; `test_*`
+# (a literal prefix glued to a wildcard within one component) is invalid syntax and is
+# silently dropped by mypy with a warning, not an error -- confirmed by running mypy and
+# seeing tests/structural's own test functions still flagged for missing annotations.
+# A bare `*` isn't a safe substitute either: since packages/contracts/src/citadel_contracts
+# has no parent __init__.py, `citadel_contracts` itself (from its own __init__.py) is ALSO
+# a single-component module name, and `*` would relax disallow_untyped_defs for real
+# source right along with the tests. So the flat modules under tests/structural/ are
+# listed by name below. Add the new file's module name here when you add a detector
+# (tests/structural/AGENTS.md's own checklist repeats this).
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+    "tests",
+    "test_contracts_import_boundary",
+    "test_identity_not_from_body",
+    "test_inference_isolation",
+    "test_module_boundaries",
+    "test_no_egress",
+    "test_no_external_urls_in_build",
+    "test_no_hardcoded_models",
+    "test_no_string_classification_compare",
+    "test_profile_ceiling_enforced_at_ingest",
+    "test_single_chokepoint",
+]
+disallow_untyped_defs = false

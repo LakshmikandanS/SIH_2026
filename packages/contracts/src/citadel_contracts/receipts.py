@@ -91,12 +91,32 @@ class ResourceLike(Protocol):
     like `citadel_contracts.domain.Resource`. Duck-typed rather than
     importing `Resource` by name so a future caller can pass its own
     equivalent without this module caring, as long as the four fields
-    agree."""
+    agree.
 
-    resource_id: str
-    type: str
-    classification: str
-    acl: Sequence[str]
+    Declared as read-only properties rather than plain attributes on
+    purpose. A plain `x: T` Protocol member is, to mypy, something that
+    must also be *settable* through the Protocol-typed reference -- which
+    forces invariance on its type. `acl: Sequence[str]` declared that way
+    would reject `citadel_contracts.domain.Resource.acl: tuple[str, ...]`
+    outright, even though a tuple plainly *is* a Sequence, because mypy
+    cannot assume it is safe to assign a bare `Sequence[str]` back into a
+    field typed as `tuple[str, ...]`. `resource_digest` and `verify_receipt`
+    only ever read these four fields; a read-only `@property` says exactly
+    that, matches covariantly, and is what lets a frozen dataclass --
+    `Resource` included, since `frozen=True` makes every field read-only --
+    satisfy this Protocol structurally."""
+
+    @property
+    def resource_id(self) -> str: ...
+
+    @property
+    def type(self) -> str: ...
+
+    @property
+    def classification(self) -> str: ...
+
+    @property
+    def acl(self) -> Sequence[str]: ...
 
 
 def resource_digest(resource: "ResourceLike") -> str:

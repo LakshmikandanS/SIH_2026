@@ -33,6 +33,46 @@ def source_files(*, package: str | None = None) -> list[Path]:
     ]
 
 
+#: Every package name under packages/, derived from the directory listing rather than
+#: hardcoded, so a tenth package added later is picked up without editing this file.
+def package_names() -> list[str]:
+    return sorted(
+        p.name for p in (REPO_ROOT / "packages").iterdir() if (p / "src").is_dir()
+    )
+
+
+def all_source_files() -> list[Path]:
+    """Every first-party Python source file across every package's src/, plus
+    services/ once it has real code. Excludes tests, caches, venvs, and registry/
+    (data, not code) -- this is the repo-wide counterpart to source_files()."""
+    roots = [REPO_ROOT / "packages" / pkg / "src" for pkg in package_names()] + [
+        REPO_ROOT / "services"
+    ]
+    files: list[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        files.extend(
+            p
+            for p in root.rglob("*.py")
+            if ".venv" not in p.parts
+            and "__pycache__" not in p.parts
+            and "tests" not in p.parts
+        )
+    return files
+
+
+def package_of(path: Path) -> str | None:
+    """Which citadel package a source file belongs to, e.g. 'runtime' for
+    packages/runtime/src/citadel_runtime/orchestrator.py. None for a path outside
+    packages/ (e.g. services/)."""
+    try:
+        rel = path.relative_to(REPO_ROOT / "packages")
+    except ValueError:
+        return None
+    return rel.parts[0]
+
+
 def control(name: str) -> str:
     """Read a negative-control fixture as source text."""
     path = CONTROLS / f"{name}{CONTROL_SUFFIX}"

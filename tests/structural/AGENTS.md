@@ -31,7 +31,7 @@ Controls live as `.txt` so they are never imported or collected by pytest.
 
 | Test | Invariant | Negative control |
 |---|---|---|
-| `test_contracts_is_self_contained` | `contracts` imports nothing internal | A module importing `citadel_platform` |
+| `test_contracts_import_boundary` | `contracts` imports nothing internal (repo-wide vantage point) | A module importing `citadel_platform` |
 | `test_module_boundaries` | The layer rule in root `AGENTS.md` | `runtime` importing `knowledge` |
 | `test_no_hardcoded_models` | No model id / VRAM / param count outside `registry/` | A literal model tag in a service |
 | `test_inference_isolation` | Only `gateway` imports an inference client | An inference import in `runtime` |
@@ -48,6 +48,20 @@ Grep is fine for a first pass and is honest about being a first pass. An AST wal
 aliased imports and does not trip on the word appearing in a docstring. Where a detector is
 grep-based, say so in its docstring so the next person knows its blind spots rather than
 trusting it further than it deserves.
+
+## Adding a new detector: three files, not one
+
+A new `test_*.py` here means three edits, not one -- easy to remember the first and forget
+the other two:
+
+1. The detector itself, paired with a negative-control fixture (above).
+2. A row in the table above.
+3. Its bare module name added to the `tool.mypy.overrides` list in root `pyproject.toml`.
+   mypy's override patterns only allow a whole dotted component to be `*` -- `test_*` as a
+   prefix-wildcard is invalid and mypy silently drops it -- so a flat module here (no
+   `__init__.py` in this directory, so no `tests.` prefix on its name) has to be listed
+   individually or it loses the "pytest-style test functions don't need `-> None`"
+   exemption and `mypy --strict` starts flagging every test in it.
 
 ## When a detector fires on legitimate code
 

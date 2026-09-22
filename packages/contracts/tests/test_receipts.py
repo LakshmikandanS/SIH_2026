@@ -98,7 +98,13 @@ def keypair():
     return private_key, private_key.public_key()
 
 
-def _make_receipt(resource, *, operation="rag.search", ttl_seconds=30, issued_at=None):
+def _make_receipt(
+    resource: Resource,
+    *,
+    operation: str = "rag.search",
+    ttl_seconds: float = 30,
+    issued_at: datetime | None = None,
+) -> DecisionReceipt:
     issued = issued_at or datetime.now(timezone.utc)
     return DecisionReceipt(
         decision_id=new_decision_id(),

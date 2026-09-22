@@ -1,0 +1,12 @@
+<!-- NEGATIVE CONTROL for test_no_external_urls_in_build. -->
+<!-- Frontend assets reference no external host -- everything the UI needs is bundled or -->
+<!-- served locally, so the sovereignty story holds in the browser too, not just the -->
+<!-- backend. This file exists so the detector can prove it still catches that edge. -->
+<!doctype html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/some-lib@1/dist/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/some-lib/1.0.0/some-lib.min.js"></script>
+</head>
+<body></body>
+</html>

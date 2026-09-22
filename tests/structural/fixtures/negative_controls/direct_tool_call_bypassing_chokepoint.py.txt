@@ -1,0 +1,20 @@
+# NEGATIVE CONTROL for test_single_chokepoint.
+# Every tool call passes through the one policy chokepoint in `citadel_tools`
+# (capability check, policy decision, receipt) -- nothing calls a tool implementation
+# or the tool registry directly. This file exists so the detector can prove it still
+# catches that edge.
+
+from __future__ import annotations
+
+from citadel_tools.registry import TOOL_REGISTRY
+
+
+def run_step(tool_name: str, args: dict):
+    # forbidden -- dispatches a tool directly, skipping capability/policy/receipt
+    return TOOL_REGISTRY[tool_name](**args)
+
+
+def run_step_alt(tool_name: str, args: dict):
+    from citadel_tools.dispatch import execute_tool   # forbidden -- same bypass, late import
+
+    return execute_tool(tool_name, args)

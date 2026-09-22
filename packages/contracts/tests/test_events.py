@@ -84,7 +84,7 @@ def test_registering_a_new_type_after_startup_is_the_point_not_scope_creep():
 def test_rejects_a_non_string_or_empty_registration(bad_value):
     registry = EventRegistry()
     with pytest.raises(ValueError):
-        registry.register(bad_value)  # type: ignore[arg-type]
+        registry.register(bad_value)
 
 
 def test_registries_are_independent_instances_not_a_shared_global():
