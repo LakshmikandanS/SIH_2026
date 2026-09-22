@@ -13,11 +13,19 @@ Grep/AST hybrid, not a full type-aware check -- documented blind spots:
   - the VRAM/param-count check keys on identifier names containing "vram" or
     "param_count"; a numeric literal hidden behind a differently-named constant is not
     caught by this pass.
+  - keywords match only when NOT immediately preceded by a letter (see `_KEYWORD_RE`
+    below), found the hard way: "ollama" -- the inference runtime name, legitimate
+    everywhere, including registry/profiles.yaml itself -- contains "llama" as a bare
+    substring, and a naive `"llama" in value.lower()` flagged citadel_platform's own
+    registry loader for validating a `runtime: ollama` field. A real model tag is
+    always its own token (quoted, or after a colon/hyphen/space), never glued onto a
+    preceding letter, so this boundary costs no real detections.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 
 from conftest import all_source_files, control
 
@@ -29,6 +37,11 @@ _MODEL_KEYWORDS = (
     "qwen", "granite", "llama", "phi-", "gemma", "mistral",
     "nomic-embed", "bge-", "deepseek",
 )
+
+#: Each keyword, compiled so it only matches when not glued onto a preceding letter --
+#: see the "ollama" blind spot above. `re.escape` because "phi-"/"bge-" contain a
+#: hyphen, harmless to escape but not meta-regex either way.
+_KEYWORD_RE = {kw: re.compile(r"(?<![a-z])" + re.escape(kw)) for kw in _MODEL_KEYWORDS}
 
 _SUSPICIOUS_NAME_FRAGMENTS = ("vram", "param_count")
 
@@ -68,8 +81,8 @@ def _findings(source: str) -> list[str]:
     findings = []
     for value in _string_constants(tree):
         lowered = value.lower()
-        for keyword in _MODEL_KEYWORDS:
-            if keyword in lowered:
+        for keyword, pattern in _KEYWORD_RE.items():
+            if pattern.search(lowered):
                 findings.append(f"model-family string literal {value!r}")
                 break
     findings.extend(f"suspicious numeric constant {name!r}" for name in _suspicious_numeric_assignments(tree))
@@ -101,3 +114,16 @@ def test_the_detector_is_not_vacuous():
     assert _findings("x = 1\ny = 'hello world'\n") == []
     # A registry *path* string is not a model identity and must not be flagged.
     assert _findings('CONFIG_PATH = "registry/models.demo-local.yaml"\n') == []
+
+
+def test_ollama_the_runtime_name_is_not_a_llama_model_family_hit():
+    """The regression this repo actually hit: "ollama" contains "llama" as a bare
+    substring, but it names the inference runtime, not a model. Validating
+    `runtime: Literal["ollama", "vllm"]` (citadel_platform's registry loader) must
+    never look like hardcoding a Llama model."""
+    assert _findings('provider: str = "ollama"\n') == []
+    assert _findings("class OllamaInference:\n    pass\n") == []
+    # A real Llama tag, elsewhere in the same string shape, must still be caught --
+    # the fix is a word boundary, not a blanket exemption for the substring "llama".
+    assert _findings('TAG = "llama3:8b"\n') != []
+    assert _findings('TAG = "meta-llama/Llama-3-8B"\n') != []

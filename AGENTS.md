@@ -197,12 +197,31 @@ and a registry entry, never an assertion.
 M0 is underway. `citadel_contracts` (`docs/PLAN-M0.md` task 3) is written, ported from the
 prototype per `packages/contracts/AGENTS.md`, and verified. The structural test suite
 (`docs/PLAN-M0.md` task, `tests/structural/AGENTS.md`) is also written: all ten detectors
-it owes, each with a negative control and a not-vacuous check. Combined: 118 tests pass (88
-contracts + 30 structural), `mypy --strict` and `ruff check` are both clean across
-`packages/contracts/src`, `packages/contracts/tests` and `tests/structural`. Everything else
-is still the skeleton this file, the ADRs, the registries and the plan describe. **Resume at
-`docs/PLAN-M0.md`, the next unchecked task** (platform: registry loader, Postgres
-migrations, audit chain).
+it owes, each with a negative control and a not-vacuous check. `citadel_platform`'s
+registry loader (`docs/PLAN-M0.md` task 4) is written: every `registry/*.yaml` file loads
+under strict pydantic validation (unknown field, unknown classification, duplicate id, a
+`fallback`/policy-operator typo -- all fail loudly, naming the file and, for a top-level
+entry, the source line), for both profiles. Building it found two more registry bugs of
+the same shape as the `classification_ceiling: restricted` one already fixed in
+`profiles.yaml`: `models.demo-local.yaml` and `tools.yaml` both used `restricted`, which
+`citadel_contracts.classification.Classification` has never defined -- fixed in those
+files' own header comments. Postgres migrations and the audit chain (the rest of task 19)
+are not started; no Postgres Python driver is importable in the dev sandbox this was built
+in (see the sandbox note below), so that part's verification strategy is still to be
+decided when work reaches it.
+
+Combined: 143 tests pass (88 contracts + 30 structural + 25 platform), `mypy --strict` and
+`ruff check` are both clean across every package's `src`/`tests` and `tests/structural`.
+Getting there also fixed two real cross-package tooling gaps that only show up once a
+second package has tests: pytest's default import mode collided on two different
+`tests/` directories both resolving to the bare module name `tests` (fixed by dropping
+`__init__.py` from every `tests/` directory, repo-wide, and running pytest with
+`--import-mode=importlib` instead -- see the comment on `addopts` in root `pyproject.toml`),
+and mypy hit the identical collision under its own module resolution (fixed by listing
+each test module individually in `tool.mypy.overrides`, the same file). Everything else is
+still the skeleton this file, the ADRs, the registries and the plan describe. **Resume at
+`docs/PLAN-M0.md`, the next unchecked task** (Postgres migrations and the audit chain,
+finishing task 19).
 
 ### Running tests/mypy/ruff in a network-restricted dev sandbox
 

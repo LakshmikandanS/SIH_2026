@@ -14,10 +14,17 @@ two files are not duplicates, neither substitutes for the other:
   provable with `citadel_contracts` as the *only* thing present (this package, pytest,
   pyjwt, cryptography — no rest of the repo). Ported from the prototype's own file of the
   same name and role.
-- `tests/structural/test_module_boundaries.py` — the repo-integrated counterpart, walking
-  the real tree from root and wired into CI for every package's dependency rule, not just
-  this one. Contracts' "zero inward" is the strictest case of the general layering rule
-  every package follows; this is where that general check lives (Task 17 — not yet written).
+- `tests/structural/test_contracts_import_boundary.py` — the repo-integrated counterpart,
+  walking the real tree from root. Named differently from the package-local file on
+  purpose — MONARCH's own `pyproject.toml` records a real pytest collection error from two
+  test files sharing a basename, and giving every test file a globally unique basename is
+  still how this repo avoids that, exactly as it did before `citadel_platform` existed. What
+  changed is *how* the uniqueness is enforced: no `tests/` directory anywhere in this repo
+  has an `__init__.py` (not this one either, not any more — see root `pyproject.toml`'s
+  `--import-mode=importlib` comment for the second, package-name-level collision that
+  forced that, once a second package's `tests/` existed to collide with this one on the
+  bare name `tests`). The general layering rule for every package (not just this one) is
+  `tests/structural/test_module_boundaries.py`, a separate file.
 
 If you need something from `platform` in here, the dependency is backwards: the type
 belongs here and the behaviour belongs there.

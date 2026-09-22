@@ -4,14 +4,22 @@
 # dispatching on tool names — the named failure mode in the root AGENTS.md.
 #
 # side_effect:  read | write | execute      (drives policy and receipt requirements)
-# classification_ceiling: the highest classification this tool may ever touch
+# classification_ceiling: the highest classification this tool may ever touch.
+# One of PUBLIC, INTERNAL, CONFIDENTIAL (citadel_contracts.classification.Classification)
+# -- "restricted" was never a real level and was a registry bug, fixed here the same
+# way as the identical bug in models.demo-local.yaml. The split that remains is real,
+# not an oversight: docs.search, docs.read, vision.extract and doc.generate touch the
+# confidential corpus directly and are capped at CONFIDENTIAL; fs.*, sheet.*, code.run
+# and calc.evaluate only ever touch task-workspace scratch files, sandboxed execution
+# or a calculator, never the source corpus, and stay capped at INTERNAL -- least
+# privilege, not a limitation anyone forgot to lift.
 
 tools:
   - name: docs.search
     package: citadel_tools.docs
     side_effect: read
     required_capabilities: [retrieval]
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     requires_receipt: true            # data boundary
     schema:
       type: object
@@ -25,7 +33,7 @@ tools:
     package: citadel_tools.docs
     side_effect: read
     required_capabilities: [retrieval]
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     requires_receipt: true
     schema:
       type: object
@@ -110,7 +118,7 @@ tools:
     package: citadel_tools.vision
     side_effect: read
     required_capabilities: [vision]
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     requires_receipt: true
     schema:
       type: object
@@ -128,7 +136,7 @@ tools:
     package: citadel_tools.doc
     side_effect: write
     required_capabilities: [doc_generation]
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     requires_receipt: true
     schema:
       type: object

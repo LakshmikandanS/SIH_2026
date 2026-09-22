@@ -39,13 +39,37 @@ citadel-sovereignty  = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages"]
-# A mistyped marker should fail, not silently register as a new one.
-addopts = "--strict-markers"
+# --strict-markers: a mistyped marker should fail, not silently register as a new one.
+#
+# --import-mode=importlib: every package's tests/ has no __init__.py (see the mypy
+# override comment below for why), which means more than one test directory in this
+# workspace is a bare `tests/` -- and, without this flag, pytest's default import mode
+# inserts each test directory onto sys.path and imports its files by bare module name,
+# so packages/contracts/tests/test_receipts.py and packages/platform/tests/ colliding
+# on the shared parent name "tests" produces a real, empirically-confirmed collection
+# error ("No module named 'tests.test_registry_loader'") the moment a second package
+# gets a populated tests/ directory -- not a hypothetical. importlib mode imports each
+# file by its actual filesystem path instead, so same-named *directories* never
+# collide. It does not relax the need for globally-unique *file basenames* across the
+# whole repo -- two files named identically would still collide -- which is exactly
+# why tests/structural/test_contracts_import_boundary.py is named differently from
+# packages/contracts/tests/test_contracts_is_self_contained.py (packages/contracts/AGENTS.md).
+addopts = "--strict-markers --import-mode=importlib"
 markers = [
     "unit: no database, no GPU, no network",
     "integration: touches Postgres or a running service",
     "structural: architectural boundary enforcement",
 ]
+# tests/structural/*.py do `from conftest import ...` -- a plain top-level import of
+# their shared helpers, not pytest's fixture-injection mechanism, and not a package-
+# relative import (tests/structural has no __init__.py, on purpose -- see the mypy
+# override comment below). --import-mode=importlib deliberately stops inserting a test
+# file's own directory onto sys.path (that insertion is what caused the cross-package
+# "tests" collision it was turned on to fix), so without this, `from conftest import
+# ...` stops resolving under importlib mode. Putting tests/structural on sys.path
+# directly, independent of import mode, is the fix: it's one specific directory, not
+# every test directory, so it does not reintroduce the collision.
+pythonpath = ["tests/structural"]
 
 [tool.ruff]
 target-version = "py312"
@@ -57,26 +81,28 @@ strict = true
 
 # Test functions are `def test_x():`, never `def test_x() -> None:` -- that is pytest's
 # own idiom, not sloppiness, and requiring the annotation on every test function is
-# noise strict mode elsewhere earns its keep by NOT producing. Applies to both test
-# layouts in this repo: packages/*/tests' dotted `tests.test_*` modules (each has an
-# __init__.py, so "tests.*"/"tests" -- a whole-component wildcard -- matches them) and
-# tests/structural's flat `test_*` modules (no package, no __init__.py, so each one
-# resolves as its own bare top-level module name, not a dotted one).
+# noise strict mode elsewhere earns its keep by NOT producing.
 #
-# mypy's override `module` patterns only allow a WHOLE component to be `*`; `test_*`
-# (a literal prefix glued to a wildcard within one component) is invalid syntax and is
-# silently dropped by mypy with a warning, not an error -- confirmed by running mypy and
-# seeing tests/structural's own test functions still flagged for missing annotations.
-# A bare `*` isn't a safe substitute either: since packages/contracts/src/citadel_contracts
-# has no parent __init__.py, `citadel_contracts` itself (from its own __init__.py) is ALSO
-# a single-component module name, and `*` would relax disallow_untyped_defs for real
-# source right along with the tests. So the flat modules under tests/structural/ are
-# listed by name below. Add the new file's module name here when you add a detector
-# (tests/structural/AGENTS.md's own checklist repeats this).
+# No tests/ directory anywhere in this repo has an __init__.py (see the
+# --import-mode=importlib comment above: two packages' tests/ both being bare `tests`
+# is what broke pytest, and the identical shape breaks mypy too -- "Duplicate module
+# named 'tests'" -- the moment two are type-checked in the same invocation, which is
+# confirmed, not hypothetical, since packages/platform/tests/ started existing).
+# Consistently no __init__.py, everywhere, means every test file resolves as its own
+# bare top-level module name -- never a dotted one -- so this override lists each one
+# individually rather than a package-qualified glob. mypy's override `module` patterns
+# only allow a WHOLE component to be `*`; `test_*` (a literal prefix glued to a
+# wildcard within one component) is invalid syntax and is silently dropped by mypy with
+# a warning, not an error. A bare `*` isn't a safe substitute either: since
+# packages/contracts/src/citadel_contracts has no parent __init__.py, `citadel_contracts`
+# itself (from its own __init__.py) is ALSO a single-component module name, and `*`
+# would relax disallow_untyped_defs for real source right along with the tests.
+#
+# Add the new file's module name here whenever a test file is added anywhere in the
+# repo -- tests/structural/AGENTS.md's own checklist repeats this for detectors, and
+# the same applies to every packages/*/tests/test_*.py.
 [[tool.mypy.overrides]]
 module = [
-    "tests.*",
-    "tests",
     "test_contracts_import_boundary",
     "test_identity_not_from_body",
     "test_inference_isolation",
@@ -87,5 +113,24 @@ module = [
     "test_no_string_classification_compare",
     "test_profile_ceiling_enforced_at_ingest",
     "test_single_chokepoint",
+    "test_classification",
+    "test_contracts_is_self_contained",
+    "test_domain",
+    "test_envelopes",
+    "test_events",
+    "test_receipts",
+    "test_state_machines",
+    "test_registry_loader",
 ]
 disallow_untyped_defs = false
+
+# PyYAML ships no inline types and no first-party stub package mypy can find in this
+# workspace (types-PyYAML exists, but network is required to install it -- see the
+# sandbox-tooling note above -- and the copy bundled inside pyright's own typeshed
+# fallback is not something mypy can be pointed at). --ignore-missing-imports does not
+# cover this: that flag suppresses "module not found" (import-not-found), and PyYAML
+# *is* found -- it just has no types, which is the distinct import-untyped error this
+# override silences, specifically for this one library rather than repo-wide.
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true

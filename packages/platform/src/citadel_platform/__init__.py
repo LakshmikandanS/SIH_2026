@@ -2,4 +2,11 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .registry import Registry, RegistryError, load_registry, load_registry_from_env
+
+__all__ = [
+    "Registry",
+    "RegistryError",
+    "load_registry",
+    "load_registry_from_env",
+]

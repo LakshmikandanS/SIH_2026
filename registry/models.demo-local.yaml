@@ -7,6 +7,16 @@
 # Budget check (ADR-0001 Gap 1):
 #   reasoning 2.6 + coding 1.9 + embedding 0.3 + KV ~1.5  =  ~6.3 GB of ~7.3 GB
 # Vision does not co-reside; it swaps, and it runs at INGEST not in the agent loop.
+#
+# classification_ceiling: confidential on every entry, on purpose, not a placeholder.
+# citadel_contracts.classification.Classification defines exactly PUBLIC, INTERNAL,
+# CONFIDENTIAL -- "restricted" was never one of them and was a registry bug (same
+# family as the one already fixed in profiles.yaml's demo-local.classification_ceiling).
+# demo-local's own profile ceiling is CONFIDENTIAL (the sovereign box has no cap below
+# it, AGENTS.md invariant 11) and every model here is local/Ollama -- fully inside that
+# same trust boundary -- so none of them has a reason to be capped lower than the
+# profile itself. Contrast models.hpc-eval.yaml, where every entry is correctly
+# `public`, matching that profile's own ceiling for the opposite reason.
 
 models:
   - id: reason-general
@@ -18,7 +28,7 @@ models:
     context_window: 32768
     vram_gb: 2.6                       # ESTIMATE — measure on the card (M1 task 1)
     quality_tier: standard
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     resident: true
     fallback: [reason-large]
 
@@ -31,7 +41,7 @@ models:
     context_window: 32768
     vram_gb: 1.9
     quality_tier: standard
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     resident: true
     fallback: [reason-general]
 
@@ -44,7 +54,7 @@ models:
     context_window: 32768
     vram_gb: 4.4
     quality_tier: high
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     resident: false
     swap_cost_s: null                  # MEASURE (M1 task 2) — the router scores with this
     fallback: [reason-general]
@@ -58,7 +68,7 @@ models:
     context_window: 16384
     vram_gb: 1.8
     quality_tier: standard
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     resident: false                    # swapped, at ingest time only
     swap_cost_s: null                  # MEASURE
     fallback: []
@@ -72,7 +82,7 @@ models:
     context_window: 8192
     vram_gb: 0.3
     quality_tier: standard
-    classification_ceiling: restricted
+    classification_ceiling: confidential
     resident: true
     fallback: []
     notes: |
