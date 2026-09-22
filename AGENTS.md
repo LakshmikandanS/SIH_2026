@@ -195,10 +195,14 @@ and a registry entry, never an assertion.
 ## Current state
 
 M0 is underway. `citadel_contracts` (`docs/PLAN-M0.md` task 3) is written, ported from the
-prototype per `packages/contracts/AGENTS.md`, and verified: 88 tests pass, `mypy --strict`
-and `ruff check` are both clean. Everything else is still the skeleton this file, the ADRs,
-the registries and the plan describe. **Resume at `docs/PLAN-M0.md`, the next unchecked
-task** (structural test suite, then platform).
+prototype per `packages/contracts/AGENTS.md`, and verified. The structural test suite
+(`docs/PLAN-M0.md` task, `tests/structural/AGENTS.md`) is also written: all ten detectors
+it owes, each with a negative control and a not-vacuous check. Combined: 118 tests pass (88
+contracts + 30 structural), `mypy --strict` and `ruff check` are both clean across
+`packages/contracts/src`, `packages/contracts/tests` and `tests/structural`. Everything else
+is still the skeleton this file, the ADRs, the registries and the plan describe. **Resume at
+`docs/PLAN-M0.md`, the next unchecked task** (platform: registry loader, Postgres
+migrations, audit chain).
 
 ### Running tests/mypy/ruff in a network-restricted dev sandbox
 
