@@ -1,0 +1,106 @@
+"""hnsw.iterative_scan -- docs/PLAN-M0.md task 5: "a filtered vector query that
+excludes most of the corpus must still return k rows... It will matter at M2 and it
+is invisible until it bites." Root AGENTS.md invariant 11 / ADR-0003 /
+packages/platform/AGENTS.md: without it, a filtered HNSW query can silently return
+FEWER than k rows once the filter (classification/ACL) excludes most of the index,
+because HNSW's bounded graph search can exhaust its candidate list before finding k
+matches that also satisfy the filter.
+
+Needs the pgvector extension (migration 0004), which this dev sandbox cannot
+install: no network to fetch a prebuilt package, no server-dev headers to compile it
+from source (root AGENTS.md's sandbox note; migration 0004's own header comment).
+Skipped here for that specific, checked reason via a real probe (does the
+`vector.control` file pg_config's own sharedir would contain actually exist),
+never unconditionally -- on the real WSL2 machine, where ops/compose/ provides
+pgvector, this probe passes and the test runs for real. Because this one cannot be
+run in the sandbox this repo was first built in, it has had less empirical
+back-and-forth than this package's other tests -- correct by careful reading and
+review, not by the same "found a bug by running it" iteration the migrations and
+audit-chain tests got.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from citadel_platform.migrations import apply_migration, discover_migrations, ensure_bootstrap
+from pg_scratch import pg_scratch_db
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+REAL_MIGRATIONS_DIR = REPO_ROOT / "packages" / "platform" / "migrations"
+
+_NOISE_ROWS = 2000  # confidential rows the classification filter must exclude
+_TARGET_ROWS = 10  # public rows clustered near the query point -- the true k=10 answer
+
+
+def _pgvector_available() -> bool:
+    result = subprocess.run(["pg_config", "--sharedir"], capture_output=True, text=True)
+    if result.returncode != 0:
+        return False
+    return (Path(result.stdout.strip()) / "extension" / "vector.control").exists()
+
+
+pytestmark = pytest.mark.skipif(
+    not _pgvector_available(),
+    reason="pgvector extension not installed on this machine -- see root AGENTS.md's sandbox note and migrations/0004_document_chunks.up.sql's header",
+)
+
+
+def _apply_through_document_chunks(env: dict[str, str]) -> None:
+    ensure_bootstrap(env=env)
+    for migration in discover_migrations(REAL_MIGRATIONS_DIR):
+        apply_migration(migration, env=env)
+
+
+@pytest.mark.integration
+def test_filtered_knn_query_returns_exactly_k_rows_with_iterative_scan():
+    with pg_scratch_db() as env:
+        _apply_through_document_chunks(env)
+
+        # A large "noise" corpus the classification filter must exclude: random
+        # 768-dim vectors, uniformly distributed, classified confidential -- the
+        # "most of the corpus" the PLAN-M0 wording refers to.
+        noise_sql = (
+            "INSERT INTO document_chunks (classification, content, embedding) "
+            "SELECT 'confidential', 'noise ' || i, "
+            "(SELECT array_agg(random()) FROM generate_series(1, 768))::vector "
+            f"FROM generate_series(1, {_NOISE_ROWS}) AS i;"
+        )
+        # A small target set, tightly clustered around the query point [0.5, 0.5,
+        # ...], classified public -- the true k=10 nearest neighbours once the
+        # filter is applied. Distinct `content` values so the assertion below can
+        # confirm these SPECIFIC rows came back, not just any 10 rows.
+        target_sql = (
+            "INSERT INTO document_chunks (classification, content, embedding) "
+            "SELECT 'public', 'target ' || i, "
+            "(SELECT array_agg(0.5 + (random() - 0.5) * 0.01) FROM generate_series(1, 768))::vector "
+            f"FROM generate_series(1, {_TARGET_ROWS}) AS i;"
+        )
+        query_sql = (
+            "SELECT content FROM document_chunks "
+            "WHERE classification = 'public' "
+            "ORDER BY embedding <-> (SELECT array_agg(0.5)::vector FROM generate_series(1, 768)) "
+            f"LIMIT {_TARGET_ROWS};"
+        )
+
+        for sql in (noise_sql, target_sql):
+            result = subprocess.run(["psql", "-v", "ON_ERROR_STOP=1", "-f", "-"], input=sql, capture_output=True, text=True, env=env)
+            assert result.returncode == 0, result.stderr
+
+        result = subprocess.run(["psql", "-t", "-A", "-f", "-"], input=query_sql, capture_output=True, text=True, env=env)
+        assert result.returncode == 0, result.stderr
+
+        returned = {line for line in result.stdout.splitlines() if line}
+        expected = {f"target {i}" for i in range(1, _TARGET_ROWS + 1)}
+
+        assert len(returned) == _TARGET_ROWS, (
+            f"expected exactly {_TARGET_ROWS} rows back despite {_NOISE_ROWS} excluded by the "
+            f"classification filter -- got {len(returned)}. This is the failure mode "
+            "hnsw.iterative_scan=strict exists to prevent (migration 0004): a plain filtered "
+            "HNSW search can give up before finding k matches once the filter excludes most "
+            "of the index."
+        )
+        assert returned == expected, f"got the wrong {_TARGET_ROWS} rows: {returned - expected}"

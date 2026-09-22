@@ -60,16 +60,19 @@ markers = [
     "integration: touches Postgres or a running service",
     "structural: architectural boundary enforcement",
 ]
-# tests/structural/*.py do `from conftest import ...` -- a plain top-level import of
-# their shared helpers, not pytest's fixture-injection mechanism, and not a package-
-# relative import (tests/structural has no __init__.py, on purpose -- see the mypy
-# override comment below). --import-mode=importlib deliberately stops inserting a test
-# file's own directory onto sys.path (that insertion is what caused the cross-package
-# "tests" collision it was turned on to fix), so without this, `from conftest import
-# ...` stops resolving under importlib mode. Putting tests/structural on sys.path
-# directly, independent of import mode, is the fix: it's one specific directory, not
-# every test directory, so it does not reintroduce the collision.
-pythonpath = ["tests/structural"]
+# tests/structural/*.py do `from conftest import ...`, and packages/platform/tests/
+# does `from pg_scratch import ...` -- a plain top-level import of shared test
+# helpers in both cases, not pytest's fixture-injection mechanism, and not a
+# package-relative import (neither directory has an __init__.py, on purpose -- see
+# the mypy override comment below). --import-mode=importlib deliberately stops
+# inserting a test file's own directory onto sys.path (that insertion is what caused
+# the cross-package "tests" collision it was turned on to fix), so without this,
+# these bare imports stop resolving under importlib mode. Putting each directory on
+# sys.path directly, independent of import mode, is the fix: these are specific,
+# individually-listed directories, not every test directory, so it does not
+# reintroduce the collision. pg_scratch.py is deliberately not named conftest.py --
+# see that file's own docstring for why a second conftest.py doesn't work here.
+pythonpath = ["tests/structural", "packages/platform/tests"]
 
 [tool.ruff]
 target-version = "py312"
@@ -121,6 +124,8 @@ module = [
     "test_receipts",
     "test_state_machines",
     "test_registry_loader",
+    "test_migrations_runner",
+    "test_vector_iterative_scan",
 ]
 disallow_untyped_defs = false
 
