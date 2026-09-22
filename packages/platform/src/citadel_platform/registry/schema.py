@@ -53,8 +53,9 @@ def _known_classification(value: str) -> str:
     """Fail closed on a value the lattice does not define. Uppercased once,
     here, at the boundary that reads the registry -- `classification.py`'s
     own docstring names this exact function as that boundary."""
-    Classification.rank(value.upper())  # raises ValueError; pydantic wraps it
-    return value
+    upper = value.upper()
+    Classification.rank(upper)  # raises ValueError; pydantic wraps it
+    return upper
 
 
 ClassificationLevel = Annotated[str, AfterValidator(_known_classification)]
@@ -270,6 +271,29 @@ class PolicyRule(_Strict):
 
 
 # ---------------------------------------------------------------------------
+# roles.yaml
+# ---------------------------------------------------------------------------
+
+
+class RoleEntry(_Strict):
+    """One entry under `roles:` in `registry/roles.yaml`. `role` is CLOSED --
+    it must match exactly the values `registry/policy.yaml`'s `actor.role`
+    rules and migration 0005's `role` column `CHECK` constraint define
+    (`engineer`, `approver`, `admin`); a fourth role is a deliberate,
+    visible one-line diff in those places, not a silently-accepted typo
+    that then grants nothing. `capabilities` is OPEN, the same vocabulary
+    `ToolEntry.required_capabilities` uses, for the same reason: a new
+    capability is a new tool's need, not a fixed catalogue. Required, not
+    defaulted, so a role entry that grants nothing says `capabilities: []`
+    explicitly rather than omitting the field and leaving a reader to guess
+    whether that was deliberate."""
+
+    role: Literal["engineer", "approver", "admin"]
+    capabilities: List[str]  # open vocabulary
+    notes: str = ""
+
+
+# ---------------------------------------------------------------------------
 # events.yaml
 # ---------------------------------------------------------------------------
 
@@ -329,6 +353,7 @@ __all__ = [
     "ModelEntry",
     "ToolEntry",
     "PolicyRule",
+    "RoleEntry",
     "EventDefinition",
     "TemplateSection",
     "Grounding",

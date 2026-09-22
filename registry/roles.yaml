@@ -1,0 +1,55 @@
+# Role -> capability grants.
+#
+# registry/AGENTS.md's own rule: a new role or a new department must never require
+# a code change, so this is data, exactly like tools.yaml and policy.yaml are. The
+# policy evaluator (citadel_tools.policy, PLAN-M0 task 8) reads this to answer
+# `actor.capabilities` -- registry/policy.yaml's allow-*-with-capability rules --
+# since citadel_contracts.domain.User carries roles, not capabilities.
+#
+# `role` is a CLOSED vocabulary (packages/platform/src/citadel_platform/registry/
+# schema.py's own closed-vs-open distinction): it must match exactly
+# packages/platform/migrations/0005_user_roles.up.sql's CHECK constraint
+# (engineer, approver, admin) and registry/policy.yaml's `actor.role: {in: [...]}`
+# checks. A fourth role is a deliberate, visible one-line diff in three places
+# (this file, the CHECK constraint, any policy rule naming roles), never a typo
+# that silently matches nothing.
+#
+# `capabilities` is OPEN, the same vocabulary registry/tools.yaml's
+# `required_capabilities` uses (retrieval, workspace, sandbox, vision,
+# doc_generation) -- adding a capability is adding a tool's need, not extending a
+# fixed catalogue.
+#
+# Grants below follow least privilege, matching ADR-0001 §Q7's demo cast: the
+# approver reviews and decides, and does not produce. No `workspace` (so
+# fs.write/sheet.write are refused by capability, not merely by convention), no
+# `sandbox` (so code.run is refused twice over -- by capability, and by
+# registry/policy.yaml's allow-execute-engineer rule, which separately checks
+# actor.role; role and capability are two independent knobs on purpose, per
+# packages/tools/AGENTS.md's "two independent checks, deliberately not
+# collapsed"), no `doc_generation`. Just `retrieval`, so an approver can search
+# and read the corpus behind whatever they are reviewing.
+
+roles:
+  - role: engineer
+    capabilities: [retrieval, workspace, sandbox, vision, doc_generation]
+    notes: |
+      The full working set: runs an inspection-to-approval-note task end to
+      end -- search the corpus, read/write the task workspace, run sandboxed
+      code, re-read a scanned region, generate the deliverable.
+
+  - role: approver
+    capabilities: [retrieval]
+    notes: |
+      Reviews and decides. Deliberately narrow: no fs.write, sheet.write,
+      code.run, vision.extract or doc.generate -- an approver who could
+      quietly edit the artifact they are approving is not a control.
+
+  - role: admin
+    capabilities: [retrieval, workspace, sandbox, vision, doc_generation]
+    notes: |
+      Operationally the same grant as engineer at M0. Kept a separate role
+      rather than collapsed into it because registry/policy.yaml's
+      allow-execute-engineer rule already names both, and the two are
+      conceptually distinct (operator vs. task participant) even where the
+      grant happens to match today -- narrowing admin later is a registry
+      edit, not a reason to have merged them now.

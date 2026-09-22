@@ -94,3 +94,23 @@ fails with `No module named citadel_platform.<pkg>.__main__`, not an error insid
 CLI as `python -m`. `migrations` shipped without one from task 5 until this was found by
 manually smoke-testing `identity`'s CLI the same way. Add the same two-line file for any
 new CLI subpackage; do not assume `cli.py` alone is enough.
+
+## `classification_ceiling` is uppercased once, at the boundary — now actually true
+
+`_known_classification()` (`registry/schema.py`) validates a registry value via
+`Classification.rank(value.upper())` but was returning the original `value` — so every
+`ToolEntry`/`ModelEntry`/`Profile.classification_ceiling` kept the YAML file's as-written
+lowercase casing (`"confidential"`, `"public"`) rather than becoming the lattice's
+uppercase form, contradicting both this function's own docstring and
+`classification.py`'s module docstring, which both name this exact function as the
+boundary where that normalisation happens. Nothing had ever called
+`Classification.rank()`/`.exceeds()` on a registry-sourced classification value before
+`citadel_tools.policy`'s `exceeds` operator did (PLAN-M0 task 8) — eight of that module's
+own tests are what caught it, all failing the same way: `ValueError: unknown
+classification 'confidential'`. Fixed by uppercasing before returning, not only before
+validating; `test_registry_loader.py`'s assertions that had pinned the old, wrong
+lowercase values now pin the corrected uppercase ones — a registry-shaped version of
+this file's own `restricted` bug above, caught the same way, by a real first consumer
+rather than by inspection. If anything ever reads a registry classification value some
+way other than through the typed `ClassificationLevel` field, it inherits this same
+uppercasing obligation; prefer the typed field instead.

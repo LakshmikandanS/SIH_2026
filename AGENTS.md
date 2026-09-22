@@ -263,11 +263,11 @@ pytest never shells out to a CLI via `-m` — confirmed fixed by re-running both
 invocations for real (`genkey` against no database, `migrations status` against the dev
 Postgres), not just by re-running the test suite.
 
-Combined: 197 tests pass, 2 skipped (101 contracts + 31 structural + 65 platform),
-`mypy --strict` clean across 60 source files, `ruff check` clean — all with the disposable
-Postgres `scripts/dev-db.sh start` brings up, so the 2 skips are only the psycopg/pgvector
-gaps above, never a missing database. Getting the migrations and audit chain landed also
-fixed three real cross-package
+Combined at that point: 197 tests pass, 2 skipped (101 contracts + 31 structural + 65
+platform), `mypy --strict` clean across 60 source files, `ruff check` clean — all with the
+disposable Postgres `scripts/dev-db.sh start` brings up, so the 2 skips are only the
+psycopg/pgvector gaps above, never a missing database. Getting the migrations and audit
+chain landed also fixed three real cross-package
 tooling gaps that only show up once a second package has tests, two now and one earlier:
 pytest's default import mode collided on two different `tests/` directories both resolving
 to the bare module name `tests` (fixed by dropping `__init__.py` from every `tests/`
@@ -286,13 +286,62 @@ stubs had been left in place when the first fix landed -- inconsistent with the 
 `__init__.py` under any `tests/`" invariant it established, and a silent reintroduction of
 the same collision waiting for whichever package's tests are written next -- found and
 deleted while building `scripts/check.sh` below, which is what now runs across all nine
-packages, not just the two with tests today. Everything else is still the skeleton this
-file, the ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md` task
-8** — the policy evaluator for `registry/policy.yaml` and the chokepoint itself in the
-still-empty `citadel_tools` package (`tests/structural/test_single_chokepoint.py`'s
-`TOOL_REGISTRY`/`execute_tool`/`dispatch_tool` naming contract). Task 7 above is done;
-task 20 was scoped as identity plus ACLs plus the chokepoint together, and is now split
-along exactly that line.
+packages, not just the two with tests today.
+
+The policy evaluator (`docs/PLAN-M0.md` task 8, first half) is now built and proven
+against the real registry. `citadel_tools.policy.evaluate(rules, actor=, resource=,
+tool=, receipt=) -> Decision` is a pure function — no I/O, no audit-chain write —
+implementing `registry/policy.yaml`'s ordered, first-match-wins, default-deny semantics
+over its five operators. `resource` and `tool` are `citadel_contracts.domain.Resource`
+and `citadel_platform.registry.schema.ToolEntry` directly, since both already carry
+exactly the fields the rules reference; `actor` needed one new shape, `ActorFacts`,
+because `User` carries `roles`, not `capabilities` — closed by a new registry file,
+`registry/roles.yaml` (role → capability grants: engineer/admin get the full working
+set, approver deliberately gets only `retrieval`, so an approver cannot `fs.write`/
+`code.run`/`doc.generate` even by mistake — capability-enforced, not just
+convention-enforced), and by `actor_facts_from_user()`, the one function that turns a
+`User` into an `ActorFacts` and does the two boundary normalisations that requires
+(reject more than one role; uppercase `clearance`) rather than leaving them implicit.
+`test_policy.py` has one test per real rule in `registry/policy.yaml`, in file order,
+plus the default-deny case no rule in the file encodes — task 8's first two `Done`
+clauses. Its third — every decision, allow and deny alike, produces an audit event —
+waits on the chokepoint below, since the evaluator itself never writes anything.
+
+Building it found two more real bugs, same shape as the `__main__.py` one above:
+documented behaviour the code never actually implemented, caught by being the first
+genuine consumer. First, in `citadel_platform`: `_known_classification()`
+(`registry/schema.py`) validated a registry classification value via
+`Classification.rank(value.upper())` but returned the original, un-uppercased `value` —
+so every `classification_ceiling` read off the registry silently kept its as-written
+lowercase YAML casing instead of becoming the lattice's uppercase form, contradicting
+the function's own docstring. Nothing had ever called `Classification.rank()`/
+`.exceeds()` on a registry-sourced value before the evaluator's `exceeds` operator did,
+which is exactly why eight of the evaluator's own tests were the ones to catch it
+(`ValueError: unknown classification 'confidential'`). Fixed by uppercasing before
+returning, not only before validating — `packages/platform/AGENTS.md` has the rest.
+Second, in the test infrastructure rather than in code: root `pyproject.toml`'s
+per-module mypy override that exempts test files from `disallow_untyped_defs` (test
+functions are `def test_x():`, never `def test_x() -> None:`) does not by itself cover
+a *typed fixture parameter* (`def test_x(registry: Registry):` — governed by the
+separate `disallow_incomplete_defs`) or a *parenthesized* `@pytest.fixture(
+scope="module")` (governed by `disallow_untyped_decorators`) — both first used by
+`test_policy.py`, for real reasons: a self-documenting fixture type, and a
+module-scoped fixture so the real registry loads from YAML once per file, not once per
+test. Fixed by adding both flags to the same override, with the reasoning recorded
+there rather than only here.
+
+Combined: 236 tests pass, 2 skipped (101 contracts + 31 structural + 68 platform + 36
+tools), `mypy --strict` clean across 62 source files, `ruff check` clean — same
+disposable-Postgres caveat as above; the 2 skips are still only the psycopg/pgvector
+gaps, never a missing database. Everything else is still the skeleton this file, the
+ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md` task 8's
+second half** — the chokepoint itself, in the still-empty-of-it `citadel_tools` package
+(`tests/structural/test_single_chokepoint.py`'s `TOOL_REGISTRY`/`execute_tool`/
+`dispatch_tool` naming contract): tool resolution from the registry, JSON-schema
+argument validation against a tool's declared schema, dispatch, and turning a
+`Decision` into an audit event for both allow and deny. Task 7 was done already; the
+evaluator half of task 8 is done as of this paragraph; task 20 was scoped as identity
+plus ACLs plus the chokepoint together, and is now down to its last third.
 
 ### Verifying the repo: `scripts/check.sh`
 

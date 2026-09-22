@@ -24,6 +24,7 @@ from citadel_platform.registry.loader import (
     load_models,
     load_policy,
     load_profiles,
+    load_roles,
     load_templates,
     load_tools,
 )
@@ -45,14 +46,17 @@ def test_loads_the_real_demo_local_registry():
     registry = load_registry("demo-local", REGISTRY_DIR)
 
     assert registry.profile.name == "demo-local"
-    assert registry.profile.classification_ceiling == "confidential"
+    assert registry.profile.classification_ceiling == "CONFIDENTIAL"
     assert registry.profile.single_box is True
 
     model_ids = {m.id for m in registry.models}
     assert model_ids == {"reason-general", "reason-code", "reason-large", "vision-doc", "embed-text"}
     # The bug this test suite exists to catch: every model here must be a
-    # real lattice value now, not "restricted".
-    assert {m.classification_ceiling for m in registry.models} == {"confidential"}
+    # real lattice value now, not "restricted". Uppercase: the YAML says
+    # "confidential", but `_known_classification` normalises it once, at
+    # the boundary that reads the registry (schema.py) -- this asserts the
+    # normalised value, not the as-written YAML casing.
+    assert {m.classification_ceiling for m in registry.models} == {"CONFIDENTIAL"}
 
     tool_names = {t.name for t in registry.tools}
     assert "docs.search" in tool_names and "code.run" in tool_names
@@ -60,6 +64,10 @@ def test_loads_the_real_demo_local_registry():
 
     assert len(registry.policy) == 8
     assert registry.policy[0].id == "deny-unknown-classification"  # order preserved
+
+    role_names = {r.role for r in registry.roles}
+    assert role_names == {"engineer", "approver", "admin"}
+    assert set(registry.capabilities_for("approver")) == {"retrieval"}
 
     assert len(registry.events) == 30
     assert len(registry.templates) == 3
@@ -69,16 +77,17 @@ def test_loads_the_real_hpc_eval_registry():
     registry = load_registry("hpc-eval", REGISTRY_DIR)
 
     assert registry.profile.name == "hpc-eval"
-    assert registry.profile.classification_ceiling == "public"
+    assert registry.profile.classification_ceiling == "PUBLIC"
     assert registry.profile.single_box is False  # absent in the YAML -- defaults False
 
     model_ids = {m.id for m in registry.models}
     assert model_ids == {"reason-general", "reason-code", "vision-doc", "embed-text", "judge"}
-    assert {m.classification_ceiling for m in registry.models} == {"public"}
+    assert {m.classification_ceiling for m in registry.models} == {"PUBLIC"}
 
     # Profile-independent files are identical regardless of which profile loaded them.
     assert len(registry.tools) == 10
     assert len(registry.policy) == 8
+    assert len(registry.roles) == 3
     assert len(registry.events) == 30
 
 
@@ -103,11 +112,14 @@ def test_registry_tool_and_model_lookup_helpers():
 
     assert registry.tool("docs.search").side_effect == "read"
     assert registry.model("reason-general").runtime == "ollama"
+    assert "retrieval" in registry.capabilities_for("engineer")
 
     with pytest.raises(KeyError):
         registry.tool("no.such.tool")
     with pytest.raises(KeyError):
         registry.model("no-such-model")
+    with pytest.raises(KeyError):
+        registry.capabilities_for("no-such-role")
 
 
 def test_load_registry_from_env_reads_citadel_profile():
@@ -290,6 +302,36 @@ rules:
     )
     rules = load_policy(tmp_path)
     assert [r.id for r in rules] == ["z-rule", "a-rule"]
+
+
+_VALID_ROLE = """
+roles:
+  - role: engineer
+    capabilities: [retrieval, workspace]
+"""
+
+
+def test_duplicate_role_fails(tmp_path):
+    duplicated = _VALID_ROLE + _VALID_ROLE.replace("roles:\n", "")
+    _write(tmp_path / "roles.yaml", duplicated)
+
+    with pytest.raises(RegistryError, match="duplicate role role 'engineer'"):
+        load_roles(tmp_path)
+
+
+def test_an_unknown_role_name_fails(tmp_path):
+    broken = _VALID_ROLE.replace("role: engineer", "role: overlord")
+    _write(tmp_path / "roles.yaml", broken)
+
+    with pytest.raises(RegistryError):
+        load_roles(tmp_path)
+
+
+def test_role_capabilities_must_be_explicit_not_defaulted(tmp_path):
+    _write(tmp_path / "roles.yaml", "roles:\n  - role: engineer\n")
+
+    with pytest.raises(RegistryError, match="capabilities"):
+        load_roles(tmp_path)
 
 
 def test_duplicate_event_name_fails(tmp_path):

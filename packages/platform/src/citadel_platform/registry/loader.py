@@ -33,6 +33,7 @@ from .schema import (
     ModelEntry,
     PolicyRule,
     Profile,
+    RoleEntry,
     TemplateEntry,
     ToolEntry,
 )
@@ -198,6 +199,14 @@ def load_policy(registry_dir: Path) -> Tuple[PolicyRule, ...]:
     )
 
 
+def load_roles(registry_dir: Path) -> Tuple[RoleEntry, ...]:
+    filename = "roles.yaml"
+    document, line_of = _load_document(registry_dir, filename)
+    return _validate_list(
+        RoleEntry, (document or {}).get("roles"), filename=filename, line_of=line_of, what="role", key_field="role"
+    )
+
+
 def load_events(registry_dir: Path) -> Tuple[EventDefinition, ...]:
     filename = "events.yaml"
     document, line_of = _load_document(registry_dir, filename)
@@ -239,6 +248,7 @@ class Registry:
     models: Tuple[ModelEntry, ...]
     tools: Tuple[ToolEntry, ...]
     policy: Tuple[PolicyRule, ...]
+    roles: Tuple[RoleEntry, ...]
     events: Tuple[EventDefinition, ...]
     templates: Tuple[TemplateEntry, ...]
 
@@ -264,6 +274,12 @@ class Registry:
                 return entry
         raise KeyError(f"no model {model_id!r} in this profile's registry")
 
+    def capabilities_for(self, role: str) -> Tuple[str, ...]:
+        for entry in self.roles:
+            if entry.role == role:
+                return tuple(entry.capabilities)
+        raise KeyError(f"no role {role!r} in this registry")
+
 
 def load_registry(profile_name: str, registry_dir: Path) -> Registry:
     """The single entry point. Loads `profiles.yaml` first to resolve which
@@ -285,6 +301,7 @@ def load_registry(profile_name: str, registry_dir: Path) -> Registry:
         models=load_models(registry_dir, profile.models),
         tools=load_tools(registry_dir),
         policy=load_policy(registry_dir),
+        roles=load_roles(registry_dir),
         events=load_events(registry_dir),
         templates=load_templates(registry_dir),
     )
@@ -315,6 +332,7 @@ __all__ = [
     "load_models",
     "load_tools",
     "load_policy",
+    "load_roles",
     "load_events",
     "load_templates",
 ]

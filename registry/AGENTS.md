@@ -21,6 +21,7 @@ That is the failure this directory prevents.
 | `models.hpc-eval.yaml` | Model registry for the university HPC evaluation profile |
 | `tools.yaml` | Tool manifest: schema, capabilities, side-effect class, classification ceiling |
 | `policy.yaml` | Policy rules. Ordered, first match wins, default deny |
+| `roles.yaml` | Role -> capability grants, read by the policy evaluator's `actor.capabilities` |
 | `events.yaml` | Event vocabulary. **Open** — registration, not a closed set |
 | `templates.yaml` | Deliverable templates and their declared placeholders |
 | `profiles.yaml` | Which files each `CITADEL_PROFILE` loads, plus GPU admission width |

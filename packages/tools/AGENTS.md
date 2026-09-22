@@ -58,6 +58,22 @@ made the prototype's loop unextensible.
 registry edit, never a code change. The prototype's four hardcoded ordered rules in a
 Python function had the right *semantics* and the wrong *location*.
 
+**The evaluator (`citadel_tools.policy`, PLAN-M0 task 8) is built and tested against the
+real registry — the chokepoint that calls it is not, yet.** `evaluate(rules, actor=,
+resource=, tool=, receipt=) -> Decision` is a pure function: no I/O, no audit-chain write.
+`resource` and `tool` are `citadel_contracts.domain.Resource` and
+`citadel_platform.registry.schema.ToolEntry` directly — both already carry exactly the
+fields the rules reference. `actor` is the one new shape (`ActorFacts`): `registry/
+roles.yaml` is what answers `actor.capabilities` from a role, since `citadel_contracts.
+domain.User` carries roles, not capabilities, and `actor_facts_from_user()` is the one
+place a `User` becomes it (see that function's own docstring for the two normalisations —
+singular role, uppercased clearance — done there and nowhere else). `test_policy.py` has
+one test per real rule in `registry/policy.yaml`, in file order, plus an empty-rule-list
+test for the default deny. What is still unbuilt: `TOOL_REGISTRY`, `execute_tool`/
+`dispatch_tool`, JSON-schema argument validation, tool resolution and dispatch, and
+turning a `Decision` into an audit event — the rest of the resolve → validate → policy →
+record → dispatch chain above.
+
 ## The sandbox
 
 One-shot containers. `--network none`, CPU/memory/PID capped, no host mounts, destroyed

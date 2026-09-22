@@ -84,7 +84,19 @@ strict = true
 
 # Test functions are `def test_x():`, never `def test_x() -> None:` -- that is pytest's
 # own idiom, not sloppiness, and requiring the annotation on every test function is
-# noise strict mode elsewhere earns its keep by NOT producing.
+# noise strict mode elsewhere earns its keep by NOT producing. The same idiom covers
+# two shapes `disallow_untyped_defs` alone does not reach, both first exercised by
+# packages/tools/tests/test_policy.py: a fixture consumed by type-annotated parameter
+# (`def test_x(registry: Registry):` -- params given, return type deliberately not,
+# since it's still `-> None` pytest never writes) is "incomplete", not "untyped", so
+# it needs `disallow_incomplete_defs` too; and a *parenthesized* `@pytest.fixture(
+# scope="module")` (needed here because reloading the real registry from YAML in
+# every single test is real, measurable waste a module-scoped fixture avoids -- not
+# decoration) resolves through a less-precise overload than bare `@pytest.fixture`,
+# which trips `disallow_untyped_decorators` on the decorated function even though
+# that function's own return type is fully annotated. Confirmed empirically: this is
+# not a hypothetical pair of flags added defensively, it is the exact diagnosis of
+# the 19 mypy errors test_policy.py produced with only `disallow_untyped_defs` set.
 #
 # No tests/ directory anywhere in this repo has an __init__.py (see the
 # --import-mode=importlib comment above: two packages' tests/ both being bare `tests`
@@ -132,8 +144,11 @@ module = [
     "test_vector_iterative_scan",
     "test_identity_keys",
     "test_identity_seed",
+    "test_policy",
 ]
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
 
 # PyYAML ships no inline types and no first-party stub package mypy can find in this
 # workspace (types-PyYAML exists, but network is required to install it -- see the
