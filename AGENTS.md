@@ -408,6 +408,26 @@ tools), `mypy --strict` clean across 72 source files, `ruff check` clean — sam
 disposable-Postgres caveat as above; the 2 skips are still only the psycopg/pgvector
 gaps, never a missing database.
 
+**First real run outside this sandbox found a real bug within minutes.** Fahim ran `uv run
+pytest -m structural` directly on the actual Windows machine (not yet inside WSL2) and hit
+a test-*collection* crash, not a test failure: `test_vector_iterative_scan.py`'s
+`_pgvector_available()` called `subprocess.run(["pg_config", "--sharedir"], ...)` with no
+guard for `pg_config` not existing at all -- `FileNotFoundError`, distinct from the
+nonzero-exit-code case it did handle -- unlike its sibling `pg_scratch.py`'s
+`pg_reachable()`, which already catches exactly that for the identical reason. Collection
+runs a module's top-level code at import time, before any `-m` marker filter is applied, so
+this crashed the whole file regardless of which marker was selected, on any machine with no
+Postgres client tools on `PATH` at all -- this sandbox never caught it because `pg_config`
+happens to be pre-installed here. Reproduced first, not just reasoned about: hiding
+`pg_config` from `PATH` in this sandbox gave the identical crash, and the same
+`try/except (FileNotFoundError, OSError): return False` shape as the sibling function fixed
+it -- confirmed by re-running the same hidden-`PATH` scenario and getting a clean "1
+skipped" instead. `README.md` had also drifted from reality (it still opened with "M0 has
+not started"); it now documents the checkpoint, `scripts/dev-db.sh` / `scripts/run-api.sh`,
+and that the shell scripts need a real bash (WSL2, per ADR-0005) even though `uv run
+pytest`/`mypy`/`ruff` work directly from a bare Windows shell -- the exact gap this bug was
+found through.
+
 ### Verifying the repo: `scripts/check.sh`
 
 `scripts/check.sh` is pytest + `mypy --strict` + ruff, in that order, run the same way

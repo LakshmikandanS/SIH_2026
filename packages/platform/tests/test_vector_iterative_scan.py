@@ -37,7 +37,18 @@ _TARGET_ROWS = 10  # public rows clustered near the query point -- the true k=10
 
 
 def _pgvector_available() -> bool:
-    result = subprocess.run(["pg_config", "--sharedir"], capture_output=True, text=True)
+    # pg_config itself may not exist at all -- not just fail -- on a machine with no
+    # Postgres client tools on PATH (confirmed empirically on native Windows, which has
+    # neither `postgresql-client` nor this sandbox's pre-installed one: subprocess.run
+    # raises FileNotFoundError/OSError before there is a returncode to check, which
+    # previously crashed test COLLECTION for the whole module rather than skipping this
+    # one test cleanly). Same shape as pg_scratch.py's pg_reachable(), which already
+    # handles this correctly -- this function is that one's sibling and had drifted
+    # from its pattern.
+    try:
+        result = subprocess.run(["pg_config", "--sharedir"], capture_output=True, text=True)
+    except (FileNotFoundError, OSError):
+        return False
     if result.returncode != 0:
         return False
     return (Path(result.stdout.strip()) / "extension" / "vector.control").exists()
