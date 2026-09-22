@@ -136,10 +136,11 @@ citadel::ruff() { citadel::run ruff "$@"; }
 # handled separately, by the checked-in per-module override in pyproject.toml.
 #
 # services/*/src joined this list when services/api (citadel_api) was first
-# written: it is reached via the same sandbox PYTHONPATH bridge as everything
-# else here (citadel_api is not yet a uv workspace member -- see that
-# package's own docstring), but "not a workspace member" must never mean "not
-# type-checked" -- root AGENTS.md's "the repo is green" claim covers every
+# written, and stays here even now that it is a real uv workspace member
+# (see that package's own docstring): mypy is invoked below with an explicit
+# list of directories, not via uv's workspace discovery, so workspace
+# membership changes what `uv sync` installs, never what this function tells
+# mypy to look at. root AGENTS.md's "the repo is green" claim covers every
 # package with real code in it, services included.
 citadel::mypy() {
     citadel::_detect_mode

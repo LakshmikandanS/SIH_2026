@@ -13,6 +13,7 @@ dependencies = [
     "citadel-runtime",
     "citadel-deliverables",
     "citadel-sovereignty",
+    "citadel-api",
 ]
 
 [dependency-groups]
@@ -24,7 +25,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "services/api"]
 
 [tool.uv.sources]
 citadel-contracts    = { workspace = true }
@@ -36,6 +37,7 @@ citadel-tools        = { workspace = true }
 citadel-runtime      = { workspace = true }
 citadel-deliverables = { workspace = true }
 citadel-sovereignty  = { workspace = true }
+citadel-api          = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages"]

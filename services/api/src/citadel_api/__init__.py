@@ -20,15 +20,16 @@ service wiring packages together, owning transport and nothing else -- and
 both are named, temporary, and reversible the moment this runs on the real
 WSL2 machine (ADR-0005) with real internet access.
 
-Not yet a `uv` workspace member: root `pyproject.toml`'s
-`[tool.uv.workspace]` still lists only `packages/*`. This package is
-reached the same way `scripts/lib/env.sh` already reaches everything else
-in this sandbox -- a `PYTHONPATH` bridge -- with `services/*/src` added to
-that file's mypy target discovery so `scripts/check.sh` actually type-checks
-it. Joining the workspace for real (so `uv run` also resolves it, and so it
-can declare `starlette`/`uvicorn` as real dependencies instead of assuming
-them pre-installed) is follow-up work, not a blocker for this checkpoint --
-see `services/AGENTS.md`.
+A real `uv` workspace member: `services/api/pyproject.toml` declares
+`starlette`/`uvicorn` as actual dependencies (not an assumption that they
+happen to be pre-installed) and root `pyproject.toml`'s
+`[tool.uv.workspace]` lists `services/api` alongside `packages/*`. `uv sync`
+resolves and installs it like any other member -- run it again after
+pulling this change, since it touches the lockfile. `scripts/lib/env.sh`'s
+sandbox-bridge fallback (a `PYTHONPATH` bridge, for a machine with no
+network to resolve the workspace at all) still applies to this package the
+same as every other one, with `services/*/src` in that file's mypy target
+discovery so `scripts/check.sh` type-checks it either way.
 """
 
 from __future__ import annotations

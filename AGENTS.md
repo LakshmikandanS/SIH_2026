@@ -386,10 +386,15 @@ network-blocked the same way, and even the globally-cached React turned out to b
 CommonJS-only with no UMD browser bundle — moot anyway, since invariant 10 forbids a CDN
 reference regardless of network access). Neither changes what `services/AGENTS.md` or
 `web/AGENTS.md` actually call for; both are reversible the moment this runs on the real
-WSL2 machine (ADR-0005) with real internet access. `citadel_api` is not yet a `uv`
-workspace member — reached via the same sandbox `PYTHONPATH` bridge as everything else,
-with `services/*/src` added to `scripts/lib/env.sh`'s mypy target discovery so
-`scripts/check.sh` still type-checks it.
+WSL2 machine (ADR-0005) with real internet access. `citadel_api` **is** a real `uv`
+workspace member (`services/api/pyproject.toml` declares `starlette`/`uvicorn` as actual
+dependencies) — fixed the same day the checkpoint first ran outside this sandbox, once a
+machine with real network access exposed the gap: `uv sync` there resolves the workspace
+for real rather than falling back to `scripts/lib/env.sh`'s sandbox-bridge `PYTHONPATH`,
+and nothing had ever declared `starlette`/`uvicorn` as a dependency of anything, so a
+`.venv` built that way had no reason to contain them. `services/*/src` stays in
+`scripts/lib/env.sh`'s mypy target discovery regardless — that is about what
+`scripts/check.sh` type-checks, not about dependency resolution.
 
 Deliberately not built in this pass, visibly rather than silently: the tool chokepoint
 itself and receipt issuance (so `try_policy` always evaluates with `receipt.valid=False`

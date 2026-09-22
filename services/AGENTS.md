@@ -26,11 +26,15 @@ substitution of implementation, not of the architecture this file describes, and
 named again in `citadel_api`'s own package docstring, not only here. Revisit once this runs
 somewhere with a real package registry.
 
-**Not yet a `uv` workspace member.** Root `pyproject.toml`'s `[tool.uv.workspace]` still
-lists only `packages/*`; `citadel_api` is reached through the same sandbox `PYTHONPATH`
-bridge as everything else (`scripts/lib/env.sh`, with `services/*/src` added to its mypy
-target discovery so `scripts/check.sh` still type-checks it). Joining the workspace for
-real -- so it can declare `starlette`/`uvicorn` as actual dependencies -- is follow-up work.
+**A real `uv` workspace member.** Root `pyproject.toml`'s `[tool.uv.workspace]` lists
+`services/api` alongside `packages/*`, and `services/api/pyproject.toml` declares
+`starlette`/`uvicorn` as actual dependencies -- found necessary the first time this
+checkpoint was run outside the build sandbox: a machine with real network access
+resolves the workspace for real (rather than falling back to `scripts/lib/env.sh`'s
+sandbox-bridge PYTHONPATH), and a `.venv` built that way has no reason to contain
+packages nothing declares a dependency on. `services/*/src` stays in that file's mypy
+target discovery regardless -- workspace membership is about dependency resolution, not
+about what `scripts/check.sh` type-checks.
 
 **What is built:** `GET /api/health`, `GET /api/registry/tools`, `GET /api/demo/users`,
 `POST /api/auth/session` (issues a session for one of the three seeded demo identities --
