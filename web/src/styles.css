@@ -1,0 +1,542 @@
+/* Citadel workbench UI -- M0 checkpoint styling.
+ *
+ * No external font, icon or CDN reference anywhere (root AGENTS.md invariant 10;
+ * web/AGENTS.md: "self-host fonts and icons... no CDN reference anywhere, including
+ * in a comment that someone will later uncomment" -- so this file has none, not even
+ * a commented-out one). System font stack only; the one graphic (the header mark) is
+ * hand-authored inline SVG in index.html, not an icon font or a fetched asset.
+ */
+
+:root {
+  --bg: #0b0f14;
+  --panel: #111826;
+  --panel-2: #17202f;
+  --border: #263041;
+  --text: #e7edf5;
+  --text-dim: #93a4bb;
+  --text-faint: #5c6b81;
+  --accent: #4f8cff;
+  --accent-dim: #2c4a80;
+  --allow: #33c481;
+  --allow-bg: rgba(51, 196, 129, 0.12);
+  --deny: #ff6570;
+  --deny-bg: rgba(255, 101, 112, 0.12);
+  --warn: #f0ad4e;
+  --warn-bg: rgba(240, 173, 78, 0.12);
+  --radius: 10px;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--accent);
+}
+
+header.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel), var(--bg));
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand svg {
+  flex: none;
+}
+
+.brand .name {
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+}
+
+.brand .tagline {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
+  margin-left: 2px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.badge.profile {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.identity-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#identity-slot:not(:empty) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.identity-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
+.identity-chip .who {
+  font-weight: 600;
+}
+
+.identity-chip .meta {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 700;
+}
+
+button.primary:hover {
+  filter: brightness(1.08);
+}
+
+button.ghost {
+  background: transparent;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+/* ---- login screen ---- */
+
+.login-intro {
+  margin-bottom: 22px;
+}
+
+.login-intro h1 {
+  margin: 0 0 6px;
+  font-size: 1.4rem;
+}
+
+.login-intro p {
+  margin: 0;
+  color: var(--text-dim);
+  max-width: 62ch;
+  line-height: 1.5;
+}
+
+.user-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.user-card {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-card:hover {
+  border-color: var(--accent);
+}
+
+.user-card .username {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.user-card .user-id {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.user-card .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---- tabs ---- */
+
+nav.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+
+nav.tabs button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 4px;
+  margin-right: 22px;
+  color: var(--text-dim);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+
+nav.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.panel {
+  display: none;
+}
+
+.panel.active {
+  display: block;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 780px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.card .hint {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+select,
+input[type="text"] {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+select:focus,
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.checkbox-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  text-transform: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  margin: 0;
+}
+
+.tool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 14px;
+}
+
+details.advanced {
+  margin-bottom: 14px;
+}
+
+details.advanced summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+}
+
+/* ---- decision result ---- */
+
+.decision-placeholder {
+  color: var(--text-faint);
+  font-size: 0.88rem;
+}
+
+.decision-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 14px;
+}
+
+.decision-pill.allow {
+  background: var(--allow-bg);
+  color: var(--allow);
+  border: 1px solid var(--allow);
+}
+
+.decision-pill.deny {
+  background: var(--deny-bg);
+  color: var(--deny);
+  border: 1px solid var(--deny);
+}
+
+.decision-explain {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.decision-explain .rule-id {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  display: block;
+  margin-top: 4px;
+}
+
+.fact-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 0.82rem;
+}
+
+.fact-grid dt {
+  color: var(--text-dim);
+}
+
+.fact-grid dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+
+.audit-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 0.82rem;
+}
+
+/* ---- audit tab ---- */
+
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.chain-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.chain-banner.ok {
+  background: var(--allow-bg);
+  color: var(--allow);
+  border-color: var(--allow);
+}
+
+.chain-banner.broken {
+  background: var(--deny-bg);
+  color: var(--deny);
+  border-color: var(--deny);
+}
+
+table.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+table.audit-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+table.audit-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+table.audit-table tr.highlight {
+  background: rgba(79, 140, 255, 0.1);
+}
+
+table.audit-table .mono {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.effect-tag {
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.effect-tag.allow {
+  color: var(--allow);
+}
+
+.effect-tag.deny {
+  color: var(--deny);
+}
+
+.empty-state {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  padding: 20px 0;
+}
+
+.error-banner {
+  background: var(--deny-bg);
+  border: 1px solid var(--deny);
+  color: var(--deny);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 14px;
+}
+
+footer.foot {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  padding: 18px;
+  border-top: 1px solid var(--border);
+}

@@ -1,7 +1,31 @@
 # AGENTS.md — web
 
 The workbench UI. Vite + React + TypeScript, Tailwind, components copied into the source
-tree rather than installed from a registry at build time.
+tree rather than installed from a registry at build time -- the target build once this runs
+somewhere with real internet access. See "M0 checkpoint" below for what actually exists now
+and why it looks different.
+
+## M0 checkpoint: plain HTML/CSS/JS, no build step
+
+`web/src/` today is hand-written `index.html` + `styles.css` + `app.js` -- zero framework,
+zero bundler, zero `node_modules` -- served directly by `services/api`'s Starlette app via
+`StaticFiles`, same origin as the API (no CORS configuration exists because there is
+nothing cross-origin to allow). Two independent reasons, not one: the sandbox this was
+first built in cannot `npm install` anything from the registry (403 from
+`registry.npmjs.org`, confirmed empirically), and separately, even a globally-cached React
+build turned out to be CommonJS-only with no UMD browser bundle, so a bundler-free `<script>`
+tag was never on the table regardless of network access. This is an interim, sandbox-driven
+substitution, not a change of direction -- the Vite+React+Tailwind build above is still the
+real target for the WSL2 machine (ADR-0005), which has ordinary internet access.
+
+What the checkpoint's UI actually covers: sign in as one of the three seeded demo
+identities (no password flow yet), the ACL/policy demonstration below (scoped down from
+"citation sets" to "tool-call decisions," since retrieval and citations do not exist yet),
+and a live view of the real hash-chained audit log with a "verify chain" button. The three
+acceptance-target surfaces in the table below -- routing breakdown, citation highlight,
+sovereignty panel -- are none of them built yet; they need the model gateway, retrieval, and
+sovereignty telemetry this checkpoint deliberately did not reach ahead of getting something
+real running end to end first.
 
 ## The binding constraint is the build, not the runtime
 

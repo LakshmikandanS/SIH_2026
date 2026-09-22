@@ -333,15 +333,80 @@ there rather than only here.
 Combined: 236 tests pass, 2 skipped (101 contracts + 31 structural + 68 platform + 36
 tools), `mypy --strict` clean across 62 source files, `ruff check` clean — same
 disposable-Postgres caveat as above; the 2 skips are still only the psycopg/pgvector
-gaps, never a missing database. Everything else is still the skeleton this file, the
-ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md` task 8's
-second half** — the chokepoint itself, in the still-empty-of-it `citadel_tools` package
-(`tests/structural/test_single_chokepoint.py`'s `TOOL_REGISTRY`/`execute_tool`/
-`dispatch_tool` naming contract): tool resolution from the registry, JSON-schema
-argument validation against a tool's declared schema, dispatch, and turning a
-`Decision` into an audit event for both allow and deny. Task 7 was done already; the
-evaluator half of task 8 is done as of this paragraph; task 20 was scoped as identity
-plus ACLs plus the chokepoint together, and is now down to its last third.
+gaps, never a missing database. Task 7 was done already; the evaluator half of task 8
+is done as of this paragraph; task 20 was scoped as identity plus ACLs plus the
+chokepoint together, and was down to its last third.
+
+Two more Postgres access points now read and write through the same `psql`-subprocess
+substitution `citadel_platform.migrations.runner` established for task 5, closing a gap
+that had been quietly blocking anything from actually running end to end: nothing before
+this could turn a real login into a real `User`, or write a real audit event, without a
+driver this sandbox cannot install. `citadel_platform.audit.psql_client.
+PsqlChainSource`/`append_via_psql` implement the same `ChainSource` Protocol
+`citadel_platform.audit.postgres` does — proven, not assumed, by `test_psql_client.py`
+against a real Postgres via `pg_scratch_db()`, including a 5-row chain that
+`citadel_platform.audit.chain.verify()` accepts and a byte-identical-formatting pin
+against `.postgres`'s own `canonical_json`/`format_occurred_at` (the two modules'
+copies must never drift, since both feed the same hash function). `citadel_platform.
+identity.store.list_users`/`get_user_by_external_identity` are the read side of task 7
+that nothing had needed yet — turning a `users` row back into a `citadel_contracts.
+domain.User`, proven against the three real seeded identities. A shared `_psql.py`
+holds the one thing both needed and migrations' own `_run_psql` deliberately does not
+share: a one-statement-in, parsed-CSV-rows-out runner, `-f -`/script-mode rather than
+`-c` (psql's `:'name'` safe-quoting substitution is a script feature, confirmed
+empirically after a `-c` attempt failed with a literal `:` syntax error at the backend
+parser) with `-q` to suppress a trailing command-completion line `--csv` mode does not
+expect (also confirmed empirically, not assumed, after it corrupted a naive parse).
+
+**PLAN-M0 task 10, pulled forward of task 9's tracing/metrics** on Fahim's explicit
+request — "make a working project checkpoint as soon as possible... try to complete ui
+with working interface" — rather than continuing straight to the tool chokepoint next.
+`services/api` (`citadel_api`) is real and running: it wires the registry loader,
+session identity, the policy evaluator and the audit chain above into one process with a
+real HTTP surface, and `web/src/` (mounted on the same process, same origin) is a real,
+working UI over it — sign in as one of the three seeded demo identities, evaluate a real
+policy decision against a resource you describe (the ACL demonstration ADR-0001 §Q7
+calls for, scoped down to tool-call decisions since retrieval/citations do not exist
+yet), and watch it land in a live, hash-verifiable audit log. `scripts/run-api.sh`
+starts the whole thing end to end, migrating the persistent `citadel_demo` database on
+first run. Proven by running it for real, not only by type-checking it: every endpoint
+exercised by hand against a live server, including the two-different-engineers,
+same-resource, different-outcome case the ACL demonstration exists to show, plus a
+Playwright pass over the actual rendered UI (login → evaluate → audit log → verify
+chain → switch identity → reload-keeps-session), all with zero console errors.
+
+Two substitutions made this possible in this sandbox, both temporary and both named
+again in the files where they actually matter (`citadel_api`'s and `services/AGENTS.
+md`'s own docstrings, `web/AGENTS.md`): **Starlette + uvicorn, not FastAPI** (FastAPI
+cannot be installed here — PyPI is network-blocked and only `starlette`/`uvicorn`/
+`flask` are pre-installed, confirmed empirically; Starlette is FastAPI's own foundation,
+so this is a substitution of implementation, not architecture), and **plain HTML/CSS/JS
+with no build step, not Vite+React+Tailwind** (this sandbox's `npm install` is
+network-blocked the same way, and even the globally-cached React turned out to be
+CommonJS-only with no UMD browser bundle — moot anyway, since invariant 10 forbids a CDN
+reference regardless of network access). Neither changes what `services/AGENTS.md` or
+`web/AGENTS.md` actually call for; both are reversible the moment this runs on the real
+WSL2 machine (ADR-0005) with real internet access. `citadel_api` is not yet a `uv`
+workspace member — reached via the same sandbox `PYTHONPATH` bridge as everything else,
+with `services/*/src` added to `scripts/lib/env.sh`'s mypy target discovery so
+`scripts/check.sh` still type-checks it.
+
+Deliberately not built in this pass, visibly rather than silently: the tool chokepoint
+itself and receipt issuance (so `try_policy` always evaluates with `receipt.valid=False`
+— an honest reflection of what exists, not a bug, and it takes over the chokepoint's
+"record the decision" responsibility in the meantime, explicitly, in its own docstring),
+the `worker`/`sandbox` services, and the SSE task stream (there is no task system yet to
+stream). **Resume at `docs/PLAN-M0.md` task 8's second half** — the chokepoint, in the
+still-empty-of-it `citadel_tools` package (`tests/structural/test_single_chokepoint.py`'s
+`TOOL_REGISTRY`/`execute_tool`/`dispatch_tool` naming contract): tool resolution from the
+registry, JSON-schema argument validation, dispatch, and turning a `Decision` into an
+audit event for both allow and deny — the one piece `try_policy` above stands in for by
+hand until it exists.
+
+Combined: 245 tests pass, 2 skipped (101 contracts + 31 structural + 77 platform + 36
+tools), `mypy --strict` clean across 72 source files, `ruff check` clean — same
+disposable-Postgres caveat as above; the 2 skips are still only the psycopg/pgvector
+gaps, never a missing database.
 
 ### Verifying the repo: `scripts/check.sh`
 

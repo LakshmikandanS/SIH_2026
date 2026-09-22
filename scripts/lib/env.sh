@@ -102,7 +102,7 @@ citadel::_bridge_pythonpath() {
     joined="$bridge"
     while IFS= read -r dir; do
         joined="${joined:+$joined:}$CITADEL_REPO_ROOT/$dir"
-    done < <(citadel::_nonempty_py_dirs "packages/*/src")
+    done < <(citadel::_nonempty_py_dirs "packages/*/src"; citadel::_nonempty_py_dirs "services/*/src")
     printf '%s' "$joined"
 }
 
@@ -122,9 +122,9 @@ citadel::run() {
 citadel::pytest() { citadel::run pytest "$@"; }
 citadel::ruff() { citadel::run ruff "$@"; }
 
-# citadel::mypy -- every packages/*/src, packages/*/tests and tests/structural that
-# has at least one .py file, all passed to mypy in a single invocation (not
-# per-package): a cross-package import -- citadel_platform importing
+# citadel::mypy -- every packages/*/src, packages/*/tests, services/*/src and
+# tests/structural that has at least one .py file, all passed to mypy in a single
+# invocation (not per-package): a cross-package import -- citadel_platform importing
 # citadel_contracts.classification, say -- is only checkable when mypy can see both
 # packages' source at once. `--strict` itself comes from root pyproject.toml's
 # [tool.mypy], not repeated here. `--ignore-missing-imports` is added only in
@@ -134,16 +134,24 @@ citadel::ruff() { citadel::run ruff "$@"; }
 # real, and blanket-ignoring missing imports there would mask a genuinely missing
 # dependency instead of catching it. yaml's own distinct import-untyped gap is
 # handled separately, by the checked-in per-module override in pyproject.toml.
+#
+# services/*/src joined this list when services/api (citadel_api) was first
+# written: it is reached via the same sandbox PYTHONPATH bridge as everything
+# else here (citadel_api is not yet a uv workspace member -- see that
+# package's own docstring), but "not a workspace member" must never mean "not
+# type-checked" -- root AGENTS.md's "the repo is green" claim covers every
+# package with real code in it, services included.
 citadel::mypy() {
     citadel::_detect_mode
     local -a targets
     mapfile -t targets < <(
         citadel::_nonempty_py_dirs "packages/*/src"
         citadel::_nonempty_py_dirs "packages/*/tests"
+        citadel::_nonempty_py_dirs "services/*/src"
         citadel::_nonempty_py_dirs "tests/structural"
     )
     if [ "${#targets[@]}" -eq 0 ]; then
-        citadel::log "ERROR: no .py files found under packages/*/src, packages/*/tests or tests/structural."
+        citadel::log "ERROR: no .py files found under packages/*/src, packages/*/tests, services/*/src or tests/structural."
         exit 1
     fi
     if [ "$_citadel_mode" = "workspace" ]; then

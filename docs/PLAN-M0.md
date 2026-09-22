@@ -10,7 +10,7 @@ rules.
 2. The audit chain writes, and `verify()` recomputes it end to end.
 3. The structural test suite passes, **and each detector catches its negative control.**
 
-Read `AGENTS.md`, then all four ADRs in `docs/adr/`, then the `AGENTS.md`
+Read `AGENTS.md`, then all five ADRs in `docs/adr/`, then the `AGENTS.md`
 of the package you are touching. Tasks are ordered; each says what "done" means.
 
 ---
@@ -134,6 +134,13 @@ use).
 
 Thin. No logic here — see `services/AGENTS.md`.
 
+**`api` is built, ahead of schedule, as the M0 checkpoint** (root AGENTS.md's "Current
+state", `services/AGENTS.md`): real `health`, auth (login for a seeded demo identity +
+verified-session-token `/api/me`), and the ACL policy demonstration wired to the real
+evaluator and audit chain, with a real web UI (`web/`) over it — but as Starlette, not
+FastAPI (sandbox substitution, see those files), and with no SSE endpoint yet, because
+there is no task system yet for one to stream. `worker` and `sandbox` are not started.
+
 **Done:** all three start; the sandbox image runs a trivial program and is destroyed;
 a network call from inside it fails.
 
@@ -157,10 +164,9 @@ nothing else; collapsing to one box needs no code change.
 
 ## 12. Egress enforcement, first cut
 
-**Blocked until the OS question in ADR-0004 is answered.** nftables is Linux; if the
-demonstration machine is Windows with Docker Desktop, the host sits outside the ruleset and
-the strongest part of target E weakens. Preferred answer: Linux, or the whole stack inside
-WSL2.
+**Unblocked — ADR-0005.** The stack runs inside a dedicated WSL2 distro with Docker
+Engine installed natively (never Docker Desktop's own WSL2 backend). See
+`ops/wsl2/README.md` for setup and the GPU-passthrough check to run first.
 
 `ops/nftables/` default-deny, internal-only Docker networks, internal DNS, sandbox with no
 interface. Telemetry is M5 — enforcement is M0, because retrofitting it means rebuilding
