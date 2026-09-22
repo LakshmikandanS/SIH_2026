@@ -1,7 +1,7 @@
 # AGENTS.md — contracts
 
 The shared vocabulary. Domain types, envelopes, the event registry, the classification
-lattice, state machines, and signed decision receipts.
+lattice, state machines, signed decision receipts, and signed session tokens.
 
 ## The one rule
 
@@ -43,6 +43,20 @@ prototype's *code* is worth carrying over rather than just its ideas:
 | `domain.py` | mostly | Drop `UNIQUE(task_id)`-style "one agent per task" assumptions. |
 | `events.py` | the discipline, not the file | **The vocabulary becomes open.** Sixteen closed event types that reject anything new is the named failure mode. A registry with registration, not a closed `StrEnum`. |
 | `tests/test_receipts.py` | ✅ all 13 KB of it | It is adversarial and it is the reason to trust the receipts. |
+
+## Two signed token kinds, two keys
+
+`receipts.py` (a decision receipt — key lifecycle deferred to M3-M4, per the porting
+table above) and `identity.py` (a session token — PLAN-M0 task 7, key lifecycle in
+`packages/platform/AGENTS.md`, needed now) are both Ed25519 via PyJWT, deliberately
+shaped alike, and deliberately independent: distinct `TOKEN_TYPE` constants
+(`"receipt"` vs `"session"`), distinct `SIGNING_ALGORITHM` constants (same value,
+`"EdDSA"`, never a shared import), and distinct keys in production. A session-signing
+key compromise must never let an attacker forge receipts, or vice versa — that
+independence is enforced by never importing one module's constants into the other, not
+by a comment asking someone not to. `identity.py`'s own module docstring explains where
+it simplifies relative to `DecisionReceipt` (no nonce, no parallel timestamp
+representation) and why each simplification is safe for what a session actually is.
 
 ## What goes here vs elsewhere
 

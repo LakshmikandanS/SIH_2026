@@ -65,3 +65,20 @@ what catches a regression in the concurrency guarantee, not a unit test of Pytho
 This package's tests need a reachable Postgres: `scripts/dev-db.sh start` (repo root)
 brings up a disposable one and prints the `PGHOST`/`PGPORT`/`PGUSER` to export. Without
 them, the integration tests and schema proofs skip cleanly instead of failing.
+
+## Session identity
+
+`citadel_contracts.identity` is a pure sign/verify primitive that takes a key and never
+decides where one comes from. `citadel_platform.identity` (PLAN-M0 task 7) is where that
+key actually lives: `keys.py` reads a base64-encoded 32-byte Ed25519 private key from
+`CITADEL_SESSION_SIGNING_KEY`, or — unlike this package's general "fail closed" posture —
+falls back to a fresh, per-process, cryptographically random key with a loud
+`warnings.warn`. That module's own docstring explains why fail-loud beats fail-closed
+here: a demo box that refuses to boot without an operator minting a key by hand is a
+worse M0 failure than a working demo whose sessions do not survive a restart, provided
+the fallback can never be predicted or influenced by an attacker. `python -m
+citadel_platform.identity genkey` is how an operator produces a value for that variable.
+Migrations 0005/0006 (the `role` column and the three ADR-0001 §Q7 demo identities) are
+the Postgres side of the same task; the `role` column is deliberately singular even
+though `citadel_contracts.domain.User.roles` is a tuple, because `registry/policy.yaml`
+branches on a singular `actor.role` — see migration 0005's own header comment.

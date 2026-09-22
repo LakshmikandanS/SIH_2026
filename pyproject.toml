@@ -121,6 +121,7 @@ module = [
     "test_domain",
     "test_envelopes",
     "test_events",
+    "test_identity",
     "test_receipts",
     "test_state_machines",
     "test_registry_loader",
@@ -129,6 +130,8 @@ module = [
     "test_audit_chain_schema",
     "test_audit_chain_postgres",
     "test_vector_iterative_scan",
+    "test_identity_keys",
+    "test_identity_seed",
 ]
 disallow_untyped_defs = false
 
