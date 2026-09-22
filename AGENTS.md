@@ -218,36 +218,45 @@ second package has tests: pytest's default import mode collided on two different
 `__init__.py` from every `tests/` directory, repo-wide, and running pytest with
 `--import-mode=importlib` instead -- see the comment on `addopts` in root `pyproject.toml`),
 and mypy hit the identical collision under its own module resolution (fixed by listing
-each test module individually in `tool.mypy.overrides`, the same file). Everything else is
+each test module individually in `tool.mypy.overrides`, the same file). The other seven
+packages' `tests/__init__.py` stubs had been left in place when that fix landed --
+inconsistent with the "no `__init__.py` under any `tests/`" invariant it established, and a
+silent reintroduction of the same collision waiting for whichever package's tests are
+written next -- found and deleted while building `scripts/check.sh` below, which is what
+now runs across all nine packages, not just the two with tests today. Everything else is
 still the skeleton this file, the ADRs, the registries and the plan describe. **Resume at
 `docs/PLAN-M0.md`, the next unchecked task** (Postgres migrations and the audit chain,
 finishing task 19).
 
-### Running tests/mypy/ruff in a network-restricted dev sandbox
+### Verifying the repo: `scripts/check.sh`
 
-If you are working in a cloud dev sandbox where `uv sync` fails resolving the `dev`
-dependency group (`mypy was not found in the package registry... 403 Forbidden`) — that is
-the sandbox's PyPI egress being blocked, not a real dependency problem. Check for
-pre-installed global tools before concluding a package is unavailable:
-
-```
-pytest --version   # and mypy, ruff, black, poetry, pyright -- check `uv tool list`
-```
-
-If they're there (they were, in the sandbox this repo was first built in — `uv tool
-install`, isolated from the workspace venv), they still can't see the workspace's own
-packages or its `pyjwt`/`cryptography`. Point `PYTHONPATH` at both the package's `src/` and
-wherever the sandbox's base Python keeps its pre-baked packages (found with
-`python3 -c "import jwt; print(jwt.__file__)"`), e.g.:
+`scripts/check.sh` is pytest + `mypy --strict` + ruff, in that order, run the same way
+whether this is a network-restricted dev sandbox or the real WSL2 machine — it is what
+this file's "Current state" section reports the pass/fail of, and it is what "the repo
+works" means in this project. Run it before calling anything done:
 
 ```
-PYTHONPATH="<jwt/cryptography's dist-packages dir>:packages/contracts/src" \
-  pytest packages/contracts/tests -q
+scripts/check.sh
 ```
 
-This is a fact about *this kind of restricted sandbox*, not about the target demonstration
-machine — the WSL2 box (ADR-0005) has ordinary internet access and `uv sync` there needs
-none of this. Don't let a sandbox workaround leak into `ops/` or the Compose files.
+All three stages always run, even if an earlier one fails, so one pass reports everything
+broken rather than a fix-and-rerun cycle per stage; exit code is 0 only if all three
+passed. `scripts/test.sh [pytest args...]` is the pytest-only stage alone, for a fast
+edit-run loop — it is not a substitute for `scripts/check.sh` before calling something
+done. Neither script takes a path to `uv`, a profile name, or a flag for which kind of
+machine this is: `scripts/lib/env.sh` decides that itself, once per run, by actually trying
+`uv run --no-sync` (works once `uv sync` has populated `.venv` — the real WSL2 machine
+after setup) and falling back to pre-installed global tools plus a `PYTHONPATH` bridge
+(this kind of sandbox, detailed in that file's own header) when it doesn't. Add a new
+package or a stub package's first real test file and both scripts pick it up on their own
+— nothing here needs updating for that.
+
+If `scripts/check.sh` reports no usable toolchain, that's the sandbox-vs-machine
+distinction it depends on actually failing on this box: either run `uv sync` at the repo
+root (needs package-registry access), or install pytest, mypy and ruff globally. This is a
+fact about *this kind of restricted sandbox*, not about the target demonstration machine —
+the WSL2 box (ADR-0005) has ordinary internet access and `uv sync` there needs none of it.
+Don't let the sandbox branch in `scripts/lib/env.sh` leak into `ops/` or the Compose files.
 
 M0 targets `demo-local` only: **one machine**, the RTX 5060 workstation, running
 everything (ADR-0004). `hpc-eval` is M1 work and has no Compose file — it runs under
