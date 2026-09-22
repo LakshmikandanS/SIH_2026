@@ -125,6 +125,9 @@ module = [
     "test_state_machines",
     "test_registry_loader",
     "test_migrations_runner",
+    "test_audit_chain",
+    "test_audit_chain_schema",
+    "test_audit_chain_postgres",
     "test_vector_iterative_scan",
 ]
 disallow_untyped_defs = false
