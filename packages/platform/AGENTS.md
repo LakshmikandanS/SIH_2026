@@ -82,3 +82,15 @@ Migrations 0005/0006 (the `role` column and the three ADR-0001 §Q7 demo identit
 the Postgres side of the same task; the `role` column is deliberately singular even
 though `citadel_contracts.domain.User.roles` is a tuple, because `registry/policy.yaml`
 branches on a singular `actor.role` — see migration 0005's own header comment.
+
+## `python -m citadel_platform.<pkg>` needs its own `__main__.py`
+
+Every CLI-shaped subpackage here (`migrations`, `identity`) is documented and invoked as
+`python -m citadel_platform.<pkg>`. That invocation needs a `<pkg>/__main__.py`
+delegating to `<pkg>/cli.py`'s `main()` — a package with a `cli.py` and an
+`if __name__ == "__main__"` guard is still not runnable via `-m` without one. Missing it
+fails with `No module named citadel_platform.<pkg>.__main__`, not an error inside
+`cli.py`, and nothing in `scripts/check.sh` catches it: pytest never shells out to the
+CLI as `python -m`. `migrations` shipped without one from task 5 until this was found by
+manually smoke-testing `identity`'s CLI the same way. Add the same two-line file for any
+new CLI subpackage; do not assume `cli.py` alone is enough.

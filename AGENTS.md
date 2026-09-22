@@ -231,10 +231,43 @@ extension this sandbox cannot install — not deleted, not faked; they run on th
 machine. `scripts/dev-db.sh` (below) is the prerequisite all of this package's Postgres
 tests share.
 
-Combined: 173 tests pass, 2 skipped (88 contracts + 31 structural + 54 platform),
-`mypy --strict` clean across 51 source files, `ruff check` clean — all with the disposable
+Identity, roles, clearances and ACLs (`docs/PLAN-M0.md` task 7, the first sub-scope of
+task 20) is now built and empirically proven. `citadel_contracts.identity` signs and
+verifies session tokens — Ed25519 via PyJWT, shaped after `receipts.py` on purpose and
+deliberately independent from it (distinct `TOKEN_TYPE`, distinct `SIGNING_ALGORITHM`
+constant, never a shared import — `packages/contracts/AGENTS.md`'s new section), with
+`citadel_contracts.domain.User` itself as the output type rather than a parallel
+identity shape. `citadel_platform.identity.keys` owns the key lifecycle `identity.py`
+deliberately does not: read `CITADEL_SESSION_SIGNING_KEY`, or fail loud-but-not-closed
+with a fresh random per-process key, on the reasoning in that module's own docstring.
+Migrations 0005 (a singular `role` column, `CHECK`-constrained to
+`engineer`/`approver`/`admin` — singular by design, since `registry/policy.yaml`
+branches on a singular `actor.role` even though `User.roles` is a tuple) and 0006 (the
+three ADR-0001 §Q7 demo identities: two engineers at different clearances in different
+departments, one approver) seed the Postgres side. `test_identity_seed.py` proves the
+two engineers actually differ in both clearance and department rather than trusting the
+`INSERT` by inspection, and proves 0006-then-0005's `down` migrations undo exactly what
+they added. `test_identity_not_from_body` (already in the structural suite) continues to
+pass — task 7's other "Done" clause.
+
+Smoke-testing the new `python -m citadel_platform.identity genkey` CLI surfaced a real,
+previously-unverified bug that predates this task: no package anywhere in the repo had a
+`__main__.py`, so `python -m citadel_platform.<pkg>` — the exact invocation
+`migrations/cli.py`'s own docstring and `argparse` `prog=` document — has never actually
+worked, for `migrations` either, since task 5. Only `python -m
+citadel_platform.migrations.cli` or an in-process `main()` call ever ran. Fixed for both
+packages with a two-line `__main__.py` delegating to `cli.py`'s `main()`;
+`packages/platform/AGENTS.md` now carries a standing note so a future CLI subpackage
+does not repeat it. Neither `scripts/check.sh` nor any existing test caught this, because
+pytest never shells out to a CLI via `-m` — confirmed fixed by re-running both
+invocations for real (`genkey` against no database, `migrations status` against the dev
+Postgres), not just by re-running the test suite.
+
+Combined: 197 tests pass, 2 skipped (101 contracts + 31 structural + 65 platform),
+`mypy --strict` clean across 60 source files, `ruff check` clean — all with the disposable
 Postgres `scripts/dev-db.sh start` brings up, so the 2 skips are only the psycopg/pgvector
-gaps above, never a missing database. Getting there also fixed three real cross-package
+gaps above, never a missing database. Getting the migrations and audit chain landed also
+fixed three real cross-package
 tooling gaps that only show up once a second package has tests, two now and one earlier:
 pytest's default import mode collided on two different `tests/` directories both resolving
 to the bare module name `tests` (fixed by dropping `__init__.py` from every `tests/`
@@ -254,8 +287,12 @@ stubs had been left in place when the first fix landed -- inconsistent with the 
 the same collision waiting for whichever package's tests are written next -- found and
 deleted while building `scripts/check.sh` below, which is what now runs across all nine
 packages, not just the two with tests today. Everything else is still the skeleton this
-file, the ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md`, the
-next unchecked task** (identity, roles, clearances and ACLs -- task 20).
+file, the ADRs, the registries and the plan describe. **Resume at `docs/PLAN-M0.md` task
+8** — the policy evaluator for `registry/policy.yaml` and the chokepoint itself in the
+still-empty `citadel_tools` package (`tests/structural/test_single_chokepoint.py`'s
+`TOOL_REGISTRY`/`execute_tool`/`dispatch_tool` naming contract). Task 7 above is done;
+task 20 was scoped as identity plus ACLs plus the chokepoint together, and is now split
+along exactly that line.
 
 ### Verifying the repo: `scripts/check.sh`
 
