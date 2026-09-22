@@ -79,7 +79,7 @@ is what makes it land.
 
 There is also one nftables ruleset to write and audit instead of two.
 
-## ⚠️ Open: what OS does the demonstration machine run?
+## ⚠️ Open: what OS does the demonstration machine run? — **resolved, see [ADR-0005](./0005-wsl2-execution-environment.md)**
 
 This now matters more than it did, and it is a question rather than a decision.
 
