@@ -145,6 +145,8 @@ module = [
     "test_identity_keys",
     "test_identity_seed",
     "test_policy",
+    "test_psql_client",
+    "test_identity_store",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false

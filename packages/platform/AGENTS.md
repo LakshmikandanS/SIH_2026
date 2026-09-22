@@ -66,6 +66,51 @@ This package's tests need a reachable Postgres: `scripts/dev-db.sh start` (repo 
 brings up a disposable one and prints the `PGHOST`/`PGPORT`/`PGUSER` to export. Without
 them, the integration tests and schema proofs skip cleanly instead of failing.
 
+## The same `psql` substitution, extended to reading and writing rows
+
+`citadel_platform.migrations.runner` was the first place this package worked around
+having no installable `psycopg` in this sandbox; `citadel_platform.audit.psql_client`
+and `citadel_platform.identity.store` are the same substitution applied to the two other
+places this package talks to Postgres — a second `ChainSource` (`PsqlChainSource`) plus
+`append_via_psql`, and `list_users`/`get_user_by_external_identity`. Both exist because
+`services/api` (the M0 checkpoint, root AGENTS.md's "Current state") needed a real login
+and a real audit write that work in this sandbox, not only on the real machine.
+
+`_psql.py` (leading underscore: private to this package) is the one shared runner both
+need: `run_psql_csv` pipes one statement to `psql --csv -q -v ON_ERROR_STOP=1 -f -`
+(script mode via stdin, not a `-c` argument — `:'name'` safe-quoting substitution is a
+script/meta-command feature and is not applied to `-c`, confirmed empirically by a
+literal `syntax error at or near ":"` before this was found) and parses the result with
+`csv.reader`, not `-t -A`, because `payload_text`/`display_name` can contain commas,
+quotes and newlines that naive delimiter-splitting would corrupt. `-q` suppresses a
+trailing command-completion line (`INSERT 0 1`) that `-f -` mode otherwise appends after
+the `--csv` output — also confirmed empirically, by a parse that briefly treated it as a
+spurious data row. Deliberately not shared with `migrations.runner`'s own private
+`_run_psql`: that one is shaped around running whole *scripts* with
+`--single-transaction`, this one around one statement with a result set — different
+subsystems that happen to reach for the same tool, not a dependency either should have
+on the other.
+
+`audit.psql_client`'s `_canonical_json`/`_format_occurred_at` are intentionally
+duplicated from `audit.postgres`'s copies rather than imported — importing that module
+here fails at its `import psycopg` line before either function would be reachable. Both
+copies must stay byte-identical (they define the exact text
+`audit.chain.compute_row_hash` hashes); `test_psql_client_matches_postgres_formatting`
+pins the agreement so a future edit to one cannot silently drift from the other.
+`identity.store`'s `User.user_id` reads from `external_identity`, never the row's UUID
+`id` — migration 0002's own comment calls `external_identity` "the subject claim from a
+verified session token," which is exactly what `citadel_contracts.identity`'s token
+claims put in `sub`; using the UUID instead would mean a token's `sub` and the row it
+came from disagree about which field *is* the identity.
+
+Both are proven against a real Postgres via `pg_scratch_db()`, not mocked:
+`test_psql_client.py` (round-trip with special characters in the payload, a `NULL`
+actor_id staying `None` rather than becoming `""`, a 5-row chain that `audit.chain.
+verify()` accepts, an empty table, the formatting pin above) and
+`test_identity_store.py` (the three real seeded identities round-trip with the right
+roles/clearance/department, a lookup miss returns `None` rather than raising, an empty
+table returns `[]`).
+
 ## Session identity
 
 `citadel_contracts.identity` is a pure sign/verify primitive that takes a key and never
