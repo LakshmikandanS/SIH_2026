@@ -2,10 +2,10 @@
 
 The workbench UI. Vite + React + TypeScript, Tailwind, components copied into the source
 tree rather than installed from a registry at build time -- the target build once this runs
-somewhere with real internet access. See "M0 checkpoint" below for what actually exists now
+somewhere with real internet access. See "Today" below for what actually exists now
 and why it looks different.
 
-## M0 checkpoint: plain HTML/CSS/JS, no build step
+## Today: plain HTML/CSS/JS, no build step
 
 `web/src/` today is hand-written `index.html` + `styles.css` + `app.js` -- zero framework,
 zero bundler, zero `node_modules` -- served directly by `services/api`'s Starlette app via
@@ -18,14 +18,31 @@ tag was never on the table regardless of network access. This is an interim, san
 substitution, not a change of direction -- the Vite+React+Tailwind build above is still the
 real target for the WSL2 machine (ADR-0005), which has ordinary internet access.
 
-What the checkpoint's UI actually covers: sign in as one of the three seeded demo
-identities (no password flow yet), the ACL/policy demonstration below (scoped down from
-"citation sets" to "tool-call decisions," since retrieval and citations do not exist yet),
-and a live view of the real hash-chained audit log with a "verify chain" button. The three
-acceptance-target surfaces in the table below -- routing breakdown, citation highlight,
-sovereignty panel -- are none of them built yet; they need the model gateway, retrieval, and
-sovereignty telemetry this checkpoint deliberately did not reach ahead of getting something
-real running end to end first.
+What it covers is a single-page app (`app.js`, hash routes, no dependencies) with eight
+views:
+
+- **Workbench.** Submit a goal at a chosen classification and follow the task live. The
+  journal streams over SSE, read with `fetch()` so that the bearer token travels in a
+  header and never in a URL. The view shows the plan, each step's routing breakdown, tool
+  calls and their results rendered by output shape, citation chips that open the source
+  region, budgets, cancel, the deliberate probe, the per-task sovereignty report, and the
+  deliverable with preview and download.
+- **Documents.** Upload with a declared classification and ACL, watch the ingest status,
+  and see each page image with its blocks.
+- **Search & access.** One query as all three identities side by side, with the denials
+  counted: the ACL surface below.
+- **Approvals.** The approver's queue, the verification report per tier, approve or
+  reject with a comment, and the released artifact with its hash and provenance.
+- **Models & routing.** The runtime's inventory, *Pull missing models*, and the router
+  run live with each candidate's score.
+- **Sovereignty.** The panel below.
+- **Audit & policy.** The hash-chained log with chain verification, and the policy
+  evaluator for trying a decision by hand.
+- **Metrics.** Latency and error rates, and the traces.
+
+The three acceptance-target surfaces in the table below are all built. Every asset is
+served from the API's own origin, and `tests/structural/test_no_external_urls_in_build.py`
+checks that no external host appears in any of them.
 
 ## The binding constraint is the build, not the runtime
 

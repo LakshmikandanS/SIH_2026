@@ -3,148 +3,81 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Citadel — workbench checkpoint</title>
+  <title>Citadel — sovereign engineering workbench</title>
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAFSElEQVR42r1XW29UVRT+1trnTKcXi4WWyqVgavHSQk1zaKGAjgKGKOGxMT74A4hEUSAxkHiJ0WjAFBOIRuMLr/PGpQ9ijJVLgVDBGkqqGB5oM+FWemWm55y9lg/TlnamLUNTWMnJ2TnZe61vfWfdNjB7ITQ1mUnvJyAEzGAsFnMeFQjlvC8WM2htDcc+PO/FSu+ngl2GzUor4aH7I7at99qFgQlAGYgLAJ0tgCwlVVUNxak808hsPlRFIxEVExFELKB6RxWHCvLdw/+0t96ZxEprq50OyPRUZnqbDN4DYQcRlTIzxFpA1aa1EBMRgQ1UZIAIbSK2OTpi265NYuVTAj6XnBjI8pa5GGKhqgpVARFnnFeoWhA5bAxEBKp6B9ms0EQ2KNtwVZ4fXfixaJa3IYhyifZxgJmsWD/4uqfr/B+j+wQAOJMNkXlRBX3GzKVQFQnD9P8jyjXCaQyoqqqGQahii4wT2QLDbwIQz/PM2GbOPM1sFKq9qqoTlc06bYkcEIViQ0vAUJa9qTmEM1ujxAwQZSocdYQ4JwCzrlKGEQ4nARGQyU31nAEgZvj3BrGgsRamIAr/bn82E48LABmGTaZQvqkBq3/Yh9pvPsDCzWugoX0oCGdOjKd8mMJ81H61AzaZwqKNa6F+gLtn/wI5ZjYAlKeMwYneqIKYIUEIqKL2yx0w0QgAoPvob7i8uxnkTFavqg8PQmMcBSiZbZsgfgDxA6i1IGPS69Ci7uAelG9qgIrApnz8/cn3AFHae9WJiFMzAVDP89yurrNDEPzMxoEqwjGa/b4BlG+sR93B3YAVyIgPjrioa96N8k31CPoHQY6Djn2HYYeTaTZEAECJybU2HC4MUz8BQHt7ezhTEKqS9o03GmaEQ0mUxVbj5f07Ub55Deq+2wO/fwjPvrsVi7ZuQNA3CI7m4dLO/bj5SxtMQT7UymStgvuOk8xiYFKEJBIJBYCypyr+DY1+REwuoEpsKBwYRtFzS1FY8QwKKsqxoKEG8xtWjleuy3uacfPkBUTKStLR/4D40DiuUdUf/+v887jneW4ikbDTMaAAuKTEvwfoSSKGigo5jGBgCJfe349bre0gYzC/vgaRkmLklT6N60eOI3H8FPIWlkCDcJI+IrCKJFmoBYBWVlbKtAwAQHV1tdvR0REUly2rYseJqUpICsOuAxCQaDmN4upK5C8uAzsGt367iK5vj8ApKoCKTJU5LGptMfq2375923Z2dj50IDEA7JKX1r1lXHNCrLU0CpSYYUd8ROYVobByCQBg+HoP/N5BcH4EEM1MO8uOa8QGp9CvWxobK/x4fPKYNlUQWgDcc/Vsi9jwKLNhHQ1IFQFHXARDSfRe7ETvxU4Eg0lwNNt4ugWxQGWIlPd2d59LTvjNOZViLu/131GxSWJjxgYIqIIMwymIwimIppuO6lRTie9EIq5YOXCj88xpz/PceDxuc+0FAjRRe6I9RVbfBhCOAtAxECrpZ0rjqtYYNy8cGTkROIUHYrGYMzH3H2UsNwBsxQtrt1Gee1Ss9QlwZzqngM/GRMTKqe4ri18H4jZzDnyUbmg9z3NvdJ07JmF4zInkRcaHz6kKmCJgNhGoWtJwLxC3sfRlRWfycEYZLU68Yll5fNiHVeDVdGGxOkoEAWoBZuNGDFR/DcNwe8/V8783NTWZlpYWOxc3o/FxumLl+jeIaBeALaoKaLpSqti7AB26ceXMF+lMajKj9M+deJ7njq0ratZvW7ZqQ+/yVa/o0up1xxa/WL/gwc4mg8cnDy6nS1esXbK8Zv1rGQCfyC15Ki9nZfh/f76WgdFF/fAAAAAASUVORK5CYII=" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="top">
+  <header class="topbar">
     <div class="brand">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2L4 5v6c0 5 3.4 8.7 8 9.9 4.6-1.2 8-4.9 8-9.9V5l-8-3z" stroke="#4f8cff" stroke-width="1.6" fill="rgba(79,140,255,0.12)"/>
-        <path d="M9 12.2l2 2 4-4.4" stroke="#4f8cff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2L4 5v6c0 5 3.4 8.7 8 9.9 4.6-1.2 8-4.9 8-9.9V5l-8-3z" stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M9 12.2l2 2 4-4.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <span class="name">CITADEL</span>
-      <span class="tagline">sovereign agentic workbench — M0 checkpoint</span>
+      <span class="brand-name">CITADEL</span>
+      <span class="brand-tag">sovereign engineering workbench</span>
     </div>
-    <div class="identity-box">
-      <span class="badge profile" id="profile-badge" hidden></span>
+    <div class="topbar-right">
+      <button type="button" class="egress-pill" id="egress-pill" title="Sovereignty: external connections observed" hidden>
+        <span class="dot"></span><span id="egress-pill-text">egress</span>
+      </button>
+      <span class="profile-pill" id="profile-pill" hidden></span>
       <span id="identity-slot"></span>
     </div>
   </header>
 
-  <main>
-    <div id="error-slot"></div>
+  <div id="toast-slot" class="toast-slot" aria-live="polite"></div>
 
-    <!-- Login screen -->
-    <section id="login-screen">
-      <div class="login-intro">
-        <h1>Sign in as a demo identity</h1>
-        <p>
-          No passwords at this checkpoint — <code>citadel_contracts.domain.User</code> carries none yet.
-          Pick one of the three identities seeded for the ADR-0001 §Q7 demonstration: two engineers at
-          different clearances in different departments, and one approver. Everything after this point
-          runs on your <em>actual verified session token</em>, never on anything the browser claims.
-        </p>
-      </div>
-      <div class="user-grid" id="user-grid">
-        <p class="empty-state">Loading demo identities…</p>
-      </div>
-    </section>
+  <section id="login-screen" class="login" hidden>
+    <div class="login-card">
+      <h1>Sign in</h1>
+      <p class="muted">
+        Choose one of the demonstration identities. Everything you then see — the documents,
+        the search results, the tools an agent may use for you, the deliverables you may approve —
+        is decided from your verified session, never from anything the browser claims.
+      </p>
+      <div class="user-grid" id="user-grid"><p class="muted">Loading identities…</p></div>
+    </div>
+  </section>
 
-    <!-- Signed-in workbench -->
-    <section id="workbench" hidden>
-      <nav class="tabs">
-        <button type="button" class="tab-btn active" data-tab="policy">Try a tool</button>
-        <button type="button" class="tab-btn" data-tab="audit">Audit log</button>
-      </nav>
+  <div id="shell" class="shell" hidden>
+    <nav class="sidebar" aria-label="Main">
+      <a href="#/work" data-view="work" class="nav-item">
+        <span class="nav-icon">▸</span>Workbench
+      </a>
+      <a href="#/documents" data-view="documents" class="nav-item">
+        <span class="nav-icon">▤</span>Documents
+      </a>
+      <a href="#/search" data-view="search" class="nav-item">
+        <span class="nav-icon">⌕</span>Search &amp; access
+      </a>
+      <a href="#/approvals" data-view="approvals" class="nav-item">
+        <span class="nav-icon">✓</span>Approvals <span class="nav-count" id="approvals-count" hidden></span>
+      </a>
+      <a href="#/models" data-view="models" class="nav-item">
+        <span class="nav-icon">◎</span>Models &amp; routing
+      </a>
+      <a href="#/sovereignty" data-view="sovereignty" class="nav-item">
+        <span class="nav-icon">⛨</span>Sovereignty
+      </a>
+      <a href="#/audit" data-view="audit" class="nav-item">
+        <span class="nav-icon">≡</span>Audit &amp; policy
+      </a>
+      <a href="#/metrics" data-view="metrics" class="nav-item">
+        <span class="nav-icon">∿</span>Metrics
+      </a>
+      <div class="sidebar-foot" id="sidebar-foot"></div>
+    </nav>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
 
-      <!-- Try a tool -->
-      <div class="panel active" id="panel-policy">
-        <div class="columns">
-          <div class="card">
-            <h2>Evaluate a policy decision</h2>
-            <p class="hint">
-              Calls the real <code>registry/policy.yaml</code> rules through
-              <code>citadel_tools.policy.evaluate()</code> — the same evaluator the (not-yet-built)
-              tool chokepoint will use — against <strong>your</strong> verified identity. Every
-              evaluation writes a real, hash-chained audit event.
-            </p>
-
-            <div class="field">
-              <label for="tool-select">Tool</label>
-              <select id="tool-select"></select>
-            </div>
-            <div class="tool-meta" id="tool-meta"></div>
-
-            <div class="field">
-              <label for="classification-select">Resource classification</label>
-              <select id="classification-select">
-                <option value="PUBLIC">Public</option>
-                <option value="INTERNAL" selected>Internal</option>
-                <option value="CONFIDENTIAL">Confidential</option>
-                <option value="RESTRICTED">Unknown / unrecognised marking (demo)</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label>Resource ACL (departments allowed to see it)</label>
-              <div class="checkbox-row" id="acl-checkboxes"></div>
-            </div>
-
-            <details class="advanced">
-              <summary>Advanced: resource id / type</summary>
-              <div class="field">
-                <label for="resource-id">Resource id</label>
-                <input type="text" id="resource-id" value="demo-resource-1" />
-              </div>
-              <div class="field">
-                <label for="resource-type">Resource type</label>
-                <input type="text" id="resource-type" value="document" />
-              </div>
-            </details>
-
-            <button type="button" class="primary" id="evaluate-btn">Evaluate decision</button>
-          </div>
-
-          <div class="card">
-            <h2>Decision</h2>
-            <div id="decision-result">
-              <p class="decision-placeholder">Run an evaluation to see the decision, the rule that made it, and the facts it was evaluated against.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Audit log -->
-      <div class="panel" id="panel-audit">
-        <div class="card">
-          <h2>Audit chain</h2>
-          <p class="hint">
-            <code>citadel_platform.audit.chain.verify()</code> recomputes every row's hash from its own
-            recorded fields and checks each row's <code>prev_hash</code> against the row before it — the
-            same proof <code>test_audit_chain_schema.py</code> runs against tampering in a real database.
-          </p>
-          <div class="audit-toolbar">
-            <button type="button" id="verify-btn">Verify chain</button>
-            <button type="button" class="ghost" id="refresh-audit-btn">Refresh</button>
-            <span id="chain-banner"></span>
-          </div>
-          <div style="overflow-x:auto">
-            <table class="audit-table" id="audit-table">
-              <thead>
-                <tr>
-                  <th>Seq</th>
-                  <th>Occurred at (UTC)</th>
-                  <th>Actor</th>
-                  <th>Event</th>
-                  <th>Details</th>
-                  <th>Row hash</th>
-                </tr>
-              </thead>
-              <tbody id="audit-tbody">
-                <tr><td colspan="6" class="empty-state">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="foot">
-    Citadel M0 checkpoint — Starlette + vanilla JS, wired to the real policy evaluator, identity store and
-    hash-chained audit log. No external script, font or stylesheet loads from this page.
-  </footer>
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button type="button" class="modal-close" data-close="1" aria-label="Close">×</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
