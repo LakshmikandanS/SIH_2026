@@ -214,3 +214,25 @@ Queued here so they are not forgotten. Run on **both** profiles (ADR-0002).
    empty responses under `format=json`, silently papered over. If no small model plans
    reliably on `demo-local`, the planner is the one call that routes to the larger model.
 4. **Offline `docker compose up` on both boxes**, networking disabled.
+
+---
+
+## Progress (updated 2026-09-23)
+
+Root `AGENTS.md` "Current state" is the authoritative version. In short:
+
+| Task | State |
+|---|---|
+| 1–8 | **Done** and proven. The history is in `docs/history/m0-build-notes.md`. Task 8's second half, the chokepoint, is built: `citadel_tools.Chokepoint`, where every decision (allow and deny) is an audit event and every allow issues a receipt that the executing boundary verifies. |
+| 9 | **Done.** Spans per task in `trace_spans` and metrics at `/api/metrics`, kept apart from the audit chain. |
+| 10 | **Done, in substituted form**: Starlette, not FastAPI. `api`, `worker` and `sandbox` are real, and the SSE stream carries the live journal. The sandbox is a long-lived hardened service rather than an image destroyed after each run (ADR-0007). |
+| 11 | **One box done** (`ops/compose/docker-compose.yml`, `citadel.cmd`, `scripts/up.sh`). The two-box override is not written. Switching the endpoint is one variable, `CITADEL_INFERENCE_ENDPOINT`. |
+| 12 | **Done differently**: a default-deny ruleset inside each egress-capable container, plus internal-only networks (ADR-0006). "A container cannot reach the internet" holds. "The sandbox has no interface" became "an interface on a network with no route out, and the api/worker refuse its connections" (ADR-0007). |
+| 13 | **Done.** Every detector has a negative control. `tests/deployment/` adds a check that the image contains what the code imports. |
+| 14 | **Not done.** The offline install drill is still ahead, and so is its manifest. |
+
+**M1–M5 capabilities were pulled forward**, at Fahim's request to complete the project, in
+demonstration form: models and routing, ingestion with OCR and vision, ACL-filtered hybrid
+retrieval, the agent loop, deliverables with verification and approval, and sovereignty
+telemetry with the probe. The four M1 measurements below have **not** been run on the
+real card, so the routing scores still use estimated VRAM and swap figures.
