@@ -11,6 +11,12 @@ dependencies = [
     "citadel-contracts",
     "citadel-platform",
     "citadel-gateway",
+    "pdfplumber>=0.11,<1",
+    "pypdfium2>=4.30,<6",
+    "pillow>=10.4,<13",
+    "pytesseract>=0.3.10,<1",
+    "python-docx>=1.1,<2",
+    "pyyaml>=6.0,<7",
 ]
 
 # uv_build ships with uv, so building this package needs no network.
