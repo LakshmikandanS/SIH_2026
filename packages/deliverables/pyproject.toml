@@ -10,6 +10,9 @@ requires-python = ">=3.12"
 dependencies = [
     "citadel-contracts",
     "citadel-platform",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "lxml>=5",
 ]
 
 # uv_build ships with uv, so building this package needs no network.
