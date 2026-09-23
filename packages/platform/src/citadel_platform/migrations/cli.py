@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from citadel_platform.migrations.runner import (
     MigrationError,
@@ -41,7 +43,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("up", help="apply every pending migration, in order")
+    up_parser = subparsers.add_parser("up", help="apply every pending migration, in order")
+    up_parser.add_argument(
+        "--create-database",
+        action="store_true",
+        help="create PGDATABASE first if it does not exist (via the 'postgres' maintenance database)",
+    )
+    up_parser.add_argument(
+        "--wait",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="wait up to this long for the server to accept connections (a container starting alongside it)",
+    )
 
     down_parser = subparsers.add_parser("down", help="revert the most recently applied migration(s)")
     down_parser.add_argument("--steps", type=int, default=1, help="how many migrations to revert (default: 1)")
@@ -51,11 +65,66 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _wait_for_server(env: Mapping[str, str], seconds: int) -> bool:
+    deadline = time.monotonic() + seconds
+    probe_env = {**env, "PGDATABASE": "postgres"}
+    while True:
+        try:
+            ok = subprocess.run(["pg_isready", "-q"], env=probe_env).returncode == 0
+        except FileNotFoundError:
+            ok = subprocess.run(
+                ["psql", "-X", "-tAc", "SELECT 1"], env=probe_env, capture_output=True
+            ).returncode == 0
+        if ok:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(1)
+
+
+def _create_database_if_missing(env: Mapping[str, str]) -> None:
+    """CREATE DATABASE cannot run inside a transaction or take a parameter, so this
+    one statement quotes the name itself -- as an identifier, with quote_ident's
+    rules -- and checks existence first so it is idempotent."""
+    target = env.get("PGDATABASE")
+    if not target:
+        raise MigrationError("--create-database needs PGDATABASE to name the database")
+    maintenance = {**env, "PGDATABASE": "postgres"}
+    exists = subprocess.run(
+        ["psql", "-X", "-tA", "-v", "ON_ERROR_STOP=1", "-v", f"name={target}", "-f", "-"],
+        input="SELECT 1 FROM pg_database WHERE datname = :'name';\n",
+        env=maintenance,
+        capture_output=True,
+        text=True,
+    )
+    if exists.returncode != 0:
+        raise MigrationError(f"could not check for database {target!r}:\n{exists.stderr.strip()}")
+    if exists.stdout.strip() == "1":
+        return
+    quoted = '"' + target.replace('"', '""') + '"'
+    created = subprocess.run(
+        ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-c", f"CREATE DATABASE {quoted}"],
+        env=maintenance,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        raise MigrationError(f"could not create database {target!r}:\n{created.stderr.strip()}")
+    print(f"created database {target!r}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     env = os.environ
 
     try:
+        if args.command == "up" and args.wait:
+            if not _wait_for_server(env, args.wait):
+                print(f"error: Postgres did not accept connections within {args.wait}s", file=sys.stderr)
+                return 1
+        if args.command == "up" and args.create_database:
+            _create_database_if_missing(env)
+
         migrations = discover_migrations(args.migrations_dir)
         ensure_bootstrap(env=env)
         applied = applied_versions(env=env)

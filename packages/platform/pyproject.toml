@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.9,<3",
     "jsonschema>=4.21,<5",
     "typing-extensions>=4.12,<5",
+    "cryptography>=42,<45",
 ]
 
 # uv_build ships with uv, so building this package needs no network.

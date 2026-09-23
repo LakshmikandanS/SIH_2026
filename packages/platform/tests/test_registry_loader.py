@@ -69,7 +69,7 @@ def test_loads_the_real_demo_local_registry():
     assert role_names == {"engineer", "approver", "admin"}
     assert set(registry.capabilities_for("approver")) == {"retrieval"}
 
-    assert len(registry.events) == 30
+    assert len(registry.events) == 32
     assert len(registry.templates) == 3
 
 
@@ -88,7 +88,7 @@ def test_loads_the_real_hpc_eval_registry():
     assert len(registry.tools) == 10
     assert len(registry.policy) == 8
     assert len(registry.roles) == 3
-    assert len(registry.events) == 30
+    assert len(registry.events) == 32
 
 
 def test_unknown_profile_name_fails_loudly():
@@ -101,7 +101,7 @@ def test_event_registry_populates_from_the_real_events_yaml():
     events = registry.event_registry()
 
     assert isinstance(events, EventRegistry)
-    assert len(events) == 30
+    assert len(events) == 32
     assert "policy.decision" in events
     assert events.is_registered("receipt.rejected")
     assert not events.is_registered("made.up.event")

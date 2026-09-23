@@ -41,15 +41,22 @@ CREATE INDEX document_chunks_embedding_hnsw ON document_chunks
 -- this, a filtered HNSW query can silently return fewer than k rows once the filter
 -- (here, classification/ACL -- invariant 5's "authorization filters before
 -- ranking") excludes most of the index, because HNSW's graph search can exhaust its
--- candidate list before finding k matches. `strict` re-scans until it actually
+-- candidate list before finding k matches. `strict_order` re-scans until it actually
 -- finds k or exhausts the table, trading latency for correctness -- the right trade
 -- for an ACL filter, which is restrictive by design. Set per-database via dynamic
 -- SQL (not a literal `ALTER DATABASE citadel SET ...`) so this migration works
 -- against whatever database it is actually run against, not only one named
 -- "citadel".
+-- Edited in place (2026-09-23), not superseded by a later migration, deliberately: this
+-- line originally said 'strict', which pgvector has never accepted -- its values are
+-- off / relaxed_order / strict_order -- so this migration could not apply against ANY
+-- real pgvector ("invalid value for parameter hnsw.iterative_scan"). It had only ever
+-- been reviewed, never run, because the sandbox that wrote it had no pgvector; the first
+-- real pgvector build (0.8.1, compiled for the sandbox) found it immediately. A migration
+-- that no database has ever successfully applied has no applied state to preserve.
 DO $$
 BEGIN
-    EXECUTE format('ALTER DATABASE %I SET hnsw.iterative_scan = %L', current_database(), 'strict');
+    EXECUTE format('ALTER DATABASE %I SET hnsw.iterative_scan = %L', current_database(), 'strict_order');
 END
 $$;
 

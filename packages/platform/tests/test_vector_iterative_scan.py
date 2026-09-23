@@ -6,17 +6,15 @@ FEWER than k rows once the filter (classification/ACL) excludes most of the inde
 because HNSW's bounded graph search can exhaust its candidate list before finding k
 matches that also satisfy the filter.
 
-Needs the pgvector extension (migration 0004), which this dev sandbox cannot
-install: no network to fetch a prebuilt package, no server-dev headers to compile it
-from source (root AGENTS.md's sandbox note; migration 0004's own header comment).
-Skipped here for that specific, checked reason via a real probe (does the
-`vector.control` file pg_config's own sharedir would contain actually exist),
-never unconditionally -- on the real WSL2 machine, where ops/compose/ provides
-pgvector, this probe passes and the test runs for real. Because this one cannot be
-run in the sandbox this repo was first built in, it has had less empirical
-back-and-forth than this package's other tests -- correct by careful reading and
-review, not by the same "found a bug by running it" iteration the migrations and
-audit-chain tests got.
+Needs the pgvector extension (migration 0004). Skipped only for that specific,
+checked reason, via a real probe (does the `vector.control` file pg_config's own
+sharedir would contain actually exist), never unconditionally. For a while this could
+not run in the sandbox the repo was first built in, which had no pgvector; pgvector
+0.8.1 was later built from source there, and this test now runs and passes in that
+sandbox, against the same Postgres 16 the retrieval path uses -- and in Docker Compose
+the `pgvector/pgvector:pg16` image provides the extension. The retrieval code relies
+on what this proves: `citadel_knowledge.retrieval` filters by classification and ACL
+in the same statement as the vector search, and still gets k rows back.
 """
 
 from __future__ import annotations
@@ -110,7 +108,7 @@ def test_filtered_knn_query_returns_exactly_k_rows_with_iterative_scan():
         assert len(returned) == _TARGET_ROWS, (
             f"expected exactly {_TARGET_ROWS} rows back despite {_NOISE_ROWS} excluded by the "
             f"classification filter -- got {len(returned)}. This is the failure mode "
-            "hnsw.iterative_scan=strict exists to prevent (migration 0004): a plain filtered "
+            "hnsw.iterative_scan=strict_order exists to prevent (migration 0004): a plain filtered "
             "HNSW search can give up before finding k matches once the filter excludes most "
             "of the index."
         )

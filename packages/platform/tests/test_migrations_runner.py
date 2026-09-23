@@ -25,7 +25,7 @@ from citadel_platform.migrations import (
     revert_migration,
     to_revert,
 )
-from pg_scratch import pg_scratch_db
+from pg_scratch import pg_scratch_db, pgvector_available
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REAL_MIGRATIONS_DIR = REPO_ROOT / "packages" / "platform" / "migrations"
@@ -53,7 +53,7 @@ def _table_names(env: dict[str, str]) -> set[str]:
 
 def test_discovers_the_real_migrations_in_version_order():
     migrations = discover_migrations(REAL_MIGRATIONS_DIR)
-    assert [m.version for m in migrations] == ["0001", "0002", "0003", "0004", "0005", "0006"]
+    assert [m.version for m in migrations] == [f"{n:04d}" for n in range(1, 10)]
     assert migrations[0].name == "audit_chain"
 
 
@@ -139,8 +139,19 @@ def test_the_real_migrations_apply_forward_and_back():
     skipped with that specific reason rather than folded silently into this test.
     """
     migrations = discover_migrations(REAL_MIGRATIONS_DIR)
-    up_to_0003 = [m for m in migrations if m.version <= "0003"]
-    expected_tables = ("audit_log", "users", "tasks", "task_journal", "artifacts", "approvals", "model_runtime_state")
+    # Every migration when pgvector is installed (0004 creates the vector column and
+    # 0007 builds on it); only the pgvector-free prefix where it is not.
+    expected_tables: tuple[str, ...]
+    if pgvector_available():
+        up_to_0003 = list(migrations)
+        expected_tables = (
+            "audit_log", "users", "tasks", "task_journal", "artifacts", "approvals",
+            "model_runtime_state", "document_chunks", "documents", "document_pages",
+            "document_blocks", "task_memory", "egress_events", "trace_spans",
+        )
+    else:
+        up_to_0003 = [m for m in migrations if m.version <= "0003"]
+        expected_tables = ("audit_log", "users", "tasks", "task_journal", "artifacts", "approvals", "model_runtime_state")
 
     with pg_scratch_db() as pg_env:
         ensure_bootstrap(env=pg_env)

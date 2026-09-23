@@ -22,9 +22,40 @@ import os
 import secrets
 import subprocess
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator
 
 import pytest
+
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
+
+
+def pgvector_available() -> bool:
+    """Whether the local Postgres install has the pgvector extension files -- the same
+    real probe test_vector_iterative_scan.py uses, shared so every test needing the
+    full schema (0004 onward) skips for the same stated reason."""
+    try:
+        result = subprocess.run(["pg_config", "--sharedir"], capture_output=True, text=True)
+    except (FileNotFoundError, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    return (Path(result.stdout.strip()) / "extension" / "vector.control").exists()
+
+
+requires_pgvector = pytest.mark.skipif(
+    not pgvector_available(),
+    reason="pgvector extension not installed on this machine (migration 0004 onward needs it)",
+)
+
+
+def apply_all_migrations(env: dict[str, str]) -> None:
+    """Every real migration, in order -- the schema a running Citadel has."""
+    from citadel_platform.migrations import apply_migration, discover_migrations, ensure_bootstrap
+
+    ensure_bootstrap(env=env)
+    for migration in discover_migrations(MIGRATIONS_DIR):
+        apply_migration(migration, env=env)
 
 
 def pg_reachable() -> bool:

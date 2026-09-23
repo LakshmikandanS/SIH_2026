@@ -177,6 +177,7 @@ class ToolEntry(_Strict):
     classification_ceiling: ClassificationLevel
     requires_receipt: bool
     schema_: Dict[str, Any] = Field(alias="schema")
+    description: str = ""  # one line a planner reads; phrasing for a model, not policy
     notes: str = ""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
