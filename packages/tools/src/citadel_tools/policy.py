@@ -133,6 +133,26 @@ def actor_facts_from_user(user: User, registry: Registry) -> ActorFacts:
     )
 
 
+def actor_facts_for_task(user: User, registry: Registry, task_classification: str) -> ActorFacts:
+    """The actor, as a task sees it: the same facts as `actor_facts_from_user`, with
+    `classification_max` lowered to the task's own classification when that is below
+    the person's clearance. A CONFIDENTIAL-cleared engineer working an INTERNAL task
+    reads, computes and writes at INTERNAL -- so everything the task produces can be
+    marked INTERNAL honestly."""
+    facts = actor_facts_from_user(user, registry)
+    level = task_classification.upper()
+    if Classification.exceeds(level, facts.classification_max):
+        raise PolicyEvaluationError(
+            f"task classification {level} exceeds {user.user_id}'s clearance {facts.classification_max}"
+        )
+    return ActorFacts(
+        role=facts.role,
+        department=facts.department,
+        classification_max=level,
+        capabilities=facts.capabilities,
+    )
+
+
 def _resolve(path: str, facts: Mapping[str, Any]) -> Any:
     subject, sep, field = path.partition(".")
     if not sep:
@@ -235,5 +255,6 @@ __all__ = [
     "DEFAULT_DENY_REASON",
     "PolicyEvaluationError",
     "actor_facts_from_user",
+    "actor_facts_for_task",
     "evaluate",
 ]

@@ -58,24 +58,42 @@ made the prototype's loop unextensible.
 registry edit, never a code change. The prototype's four hardcoded ordered rules in a
 Python function had the right *semantics* and the wrong *location*.
 
-**The evaluator (`citadel_tools.policy`, PLAN-M0 task 8) is built and tested against the
-real registry — the chokepoint that calls it is not, yet.** `evaluate(rules, actor=,
-resource=, tool=, receipt=) -> Decision` is a pure function: no I/O, no audit-chain write.
-`resource` and `tool` are `citadel_contracts.domain.Resource` and
-`citadel_platform.registry.schema.ToolEntry` directly — both already carry exactly the
-fields the rules reference. `actor` is the one new shape (`ActorFacts`): `registry/
-roles.yaml` is what answers `actor.capabilities` from a role, since `citadel_contracts.
-domain.User` carries roles, not capabilities, and `actor_facts_from_user()` is the one
-place a `User` becomes it (see that function's own docstring for the two normalisations —
-singular role, uppercased clearance — done there and nowhere else). `test_policy.py` has
-one test per real rule in `registry/policy.yaml`, in file order, plus an empty-rule-list
-test for the default deny. What is still unbuilt: `TOOL_REGISTRY`, `execute_tool`/
-`dispatch_tool`, JSON-schema argument validation, tool resolution and dispatch, and
-turning a `Decision` into an audit event — the rest of the resolve → validate → policy →
-record → dispatch chain above.
+**Built.** `citadel_tools.policy.evaluate(rules, actor=, resource=, tool=, receipt=)
+-> Decision` is the pure evaluator. `registry/roles.yaml` answers `actor.capabilities`,
+and `actor_facts_for_task()` caps an actor's clearance at the task's classification.
+`Chokepoint.invoke(ctx, name, arguments)` is the one function every tool call goes through:
+
+1. Resolve the tool in `registry/tools.yaml`, whose plugin is found through its
+   package's `PLUGINS` table.
+2. Coerce the arguments, then validate them against the declared JSON schema.
+3. Let the plugin describe the resource it would touch.
+4. Evaluate policy with `receipt.valid=True`, the question being "would this be allowed
+   with a valid receipt".
+5. Audit the decision, allow and deny alike.
+6. On allow, sign a single-use receipt bound to the resource digest (`receipt.issued`).
+7. Run the plugin.
+
+The executing boundary verifies that receipt itself: `DataBoundary` for documents,
+workspace and deliverables, and `sandbox.run_verified` for code, each with its own nonce
+store. If the receipt fails there, the decision is re-evaluated with `valid=False`, which
+yields `deny-missing-receipt` and is audited. A result whose boundary never verified is
+discarded. `Chokepoint.available(ctx)` answers which tools this actor could use for this
+task, and why not, without invoking anything; the planner uses it.
+
+Outputs are harvested by shape, not by tool name. A `ToolOutput` carries `evidence`
+(E# document regions, C# computations), `artifacts` and a summary for the model. The
+agent loop never learns which tool produced what. `tests/structural/test_single_chokepoint.py`
+keeps `execute_tool`/`dispatch_tool`/`TOOL_REGISTRY` from appearing anywhere else.
 
 ## The sandbox
 
-One-shot containers. `--network none`, CPU/memory/PID capped, no host mounts, destroyed
-after use. It is the only component permitted to execute model-authored code, and it runs
-on the app box where it contends with nothing.
+The only component permitted to execute model-authored code. It is **one hardened service
+on an internal-only network, not a container per run**
+([ADR-0007](../../docs/adr/0007-the-sandbox-is-a-service-not-a-container-per-run.md)).
+A container per run would need the worker to hold the Docker socket, which is a far larger
+capability than the code it would contain. Every run gets a verified receipt, a fresh
+directory, a separate process with rlimits and a process-group timeout, and an audit hook
+as defence in depth. The container itself provides the boundary: no route out, read-only
+root, `cap_drop: ALL`, and the api/worker rulesets refuse any connection it tries to open.
+Without containers (`scripts/run.sh`), the same `run_verified` runs in-process as
+`LocalSandboxRunner`, and every result from it says `kind: process`.

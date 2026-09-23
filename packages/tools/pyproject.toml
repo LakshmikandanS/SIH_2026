@@ -12,6 +12,10 @@ dependencies = [
     "citadel-gateway",
     "citadel-knowledge",
     "citadel-deliverables",
+    "jsonschema>=4",
+    "openpyxl>=3.1",
+    "pillow>=10",
+    "cryptography>=42,<45",
 ]
 
 # uv_build ships with uv, so building this package needs no network.
