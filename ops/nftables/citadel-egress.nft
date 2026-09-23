@@ -1,0 +1,32 @@
+# Citadel egress ruleset -- applied inside each API/worker container's own network
+# namespace by ops/compose/egress-entrypoint.sh, before the application starts.
+# Readable in seconds, on purpose (packages/sovereignty/AGENTS.md):
+#
+#   OUT  loopback                            allowed
+#        replies to connections made to us   allowed   (the browser talking to the API)
+#        the deployment's internal networks  allowed   (@INTERNAL_CIDRS@)
+#        the inference runtime on the host   allowed   (@INFERENCE_IP@ tcp @INFERENCE_PORT@)
+#        everything else                     refused, immediately (not silently dropped),
+#                                            so a probe gets an answer instead of a timeout
+#   IN   new connections from the sandbox    refused   (@UNTRUSTED_CIDRS@) -- code that
+#        network                                        escaped the sandbox cannot even
+#                                                       reach this container's ports
+#        everything else                     allowed   (Docker publishes only the API's
+#                                                       port, and only on 127.0.0.1)
+#
+# The telemetry never reads this table or its counters; it observes independently.
+
+table inet citadel_egress {
+    chain output {
+        type filter hook output priority 0; policy drop;
+        oifname "lo" accept
+        ct state established,related accept
+        ip daddr { @INTERNAL_CIDRS@ } accept
+        ip daddr @INFERENCE_IP@ tcp dport @INFERENCE_PORT@ accept
+        reject with icmpx type admin-prohibited
+    }
+    chain input {
+        type filter hook input priority 0; policy accept;
+        ip saddr { @UNTRUSTED_CIDRS@ } ct state new reject with icmpx type admin-prohibited
+    }
+}

@@ -1,0 +1,11 @@
+.git
+.venv
+.dev
+.citadel-data
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+node_modules
+.kilo
+*.pyc

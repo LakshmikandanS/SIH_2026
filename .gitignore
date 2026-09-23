@@ -19,3 +19,6 @@ models/
 
 # scripts/dev-db.sh's disposable local Postgres: data dir, socket dir, server log.
 .dev/
+
+# Citadel runtime data (documents, artifacts, workspaces) from scripts/run.sh.
+.citadel-data/

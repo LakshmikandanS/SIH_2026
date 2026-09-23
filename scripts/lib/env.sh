@@ -149,7 +149,10 @@ citadel::mypy() {
         citadel::_nonempty_py_dirs "packages/*/src"
         citadel::_nonempty_py_dirs "packages/*/tests"
         citadel::_nonempty_py_dirs "services/*/src"
+        citadel::_nonempty_py_dirs "services/*/tests"
         citadel::_nonempty_py_dirs "tests/structural"
+        citadel::_nonempty_py_dirs "tests/deployment"
+        citadel::_nonempty_py_dirs "tests/fakes"
     )
     if [ "${#targets[@]}" -eq 0 ]; then
         citadel::log "ERROR: no .py files found under packages/*/src, packages/*/tests, services/*/src or tests/structural."
