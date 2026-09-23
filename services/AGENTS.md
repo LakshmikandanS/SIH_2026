@@ -2,55 +2,34 @@
 
 The deployable processes. These may import any package; nothing imports them.
 
-| Service | Runs | Notes |
+| Service | Runs | What it is |
 |---|---|---|
-| `api` | App box | Starlette today (see "M0 checkpoint" below), FastAPI once installable. Auth, task submit/cancel, SSE streams, artifacts, admin |
-| `worker` | App box | Pulls from the queue, runs the agent loop, writes the journal -- not yet started |
-| `sandbox` | App box | One-shot container image. `--network none`, capped, no host mounts, destroyed after use -- not yet started |
+| `api` | App box | Starlette + uvicorn. Auth, task submit/cancel/probe, SSE task streams, documents and uploads, artifacts and approval decisions, models and routing, sovereignty, audit, metrics — and the web UI (`web/src/`) mounted on the same origin |
+| `worker` | App box | Task threads (claim with `SKIP LOCKED`, run the agent loop, write the journal), ingestion threads behind CPU admission, resident-set warm-up, and — with `CITADEL_SEED_CORPUS=1` — the demo corpus, once the approved models are installed |
+| `sandbox` | App box | One hardened service on an internal-only network that verifies a receipt and runs model-authored Python ([ADR-0007](../docs/adr/0007-the-sandbox-is-a-service-not-a-container-per-run.md)) |
 
-## M0 checkpoint: what `api` actually is right now
+All three run from one image (`ops/compose/Dockerfile`) and one Compose file
+(`ops/compose/docker-compose.yml`), started by `citadel.cmd` on Windows or `scripts/up.sh`
+on Linux/WSL2; `scripts/run.sh` runs `api` and `worker` as plain processes (with the
+in-process sandbox, labelled `kind: process` wherever it reports) for development.
 
-PLAN-M0 task 10, pulled forward of task 9 (tracing/metrics) on Fahim's explicit request
-for a working, demonstrable checkpoint before further pipeline work: `services/api`
-(`citadel_api`) is real and running, wiring together everything `packages/` already had
-built -- the registry loader, session identity, the policy evaluator, and the hash-chained
-audit log -- into one Starlette app with real routes and a real web UI (`web/`) mounted on
-it, same origin. `scripts/run-api.sh` starts it end to end (dev database, migrate the demo
-data, launch uvicorn).
+**Starlette + uvicorn, not FastAPI.** FastAPI could not be installed in the sandbox this
+was first built in — PyPI is network-blocked there and only `starlette`/`uvicorn`/`flask`
+were pre-installed (confirmed empirically). Starlette is FastAPI's own foundation; this is
+a substitution of implementation, not of the architecture this file describes, and it is
+named again in `citadel_api`'s own package docstring. Revisit once this is built somewhere
+with a real package registry. The container image installs its third-party dependencies
+from `ops/compose/requirements.txt` at build time and puts `packages/*/src` and
+`services/*/src` on `PYTHONPATH`, the same bridge `scripts/lib/env.sh` uses, so no build
+backend has to be fetched for the workspace packages themselves.
 
-**Starlette + uvicorn, not FastAPI.** FastAPI cannot be installed in the sandbox this was
-first built in -- PyPI is network-blocked there and only `starlette`/`uvicorn`/`flask` are
-pre-installed (confirmed empirically, not assumed). Starlette is FastAPI's own foundation
-and keeps this table's "SSE streams" line reachable without a rewrite; this is a
-substitution of implementation, not of the architecture this file describes, and it is
-named again in `citadel_api`'s own package docstring, not only here. Revisit once this runs
-somewhere with a real package registry.
+**Real `uv` workspace members.** Root `pyproject.toml` lists `services/api`,
+`services/worker` and `services/sandbox`, and each declares its real third-party
+dependencies — a `.venv` built by `uv sync` must contain everything the service imports.
 
-**A real `uv` workspace member.** Root `pyproject.toml`'s `[tool.uv.workspace]` lists
-`services/api` alongside `packages/*`, and `services/api/pyproject.toml` declares
-`starlette`/`uvicorn` as actual dependencies -- found necessary the first time this
-checkpoint was run outside the build sandbox: a machine with real network access
-resolves the workspace for real (rather than falling back to `scripts/lib/env.sh`'s
-sandbox-bridge PYTHONPATH), and a `.venv` built that way has no reason to contain
-packages nothing declares a dependency on. `services/*/src` stays in that file's mypy
-target discovery regardless -- workspace membership is about dependency resolution, not
-about what `scripts/check.sh` type-checks.
-
-**What is built:** `GET /api/health`, `GET /api/registry/tools`, `GET /api/demo/users`,
-`POST /api/auth/session` (issues a session for one of the three seeded demo identities --
-no password exists yet, see `citadel_api.handlers.create_session`'s own docstring for why
-this is not an invariant-3 violation), `GET /api/me`, `POST /api/policy/try` (the ACL
-demonstration: evaluates the real `registry/policy.yaml` rules against the caller's
-verified identity and a caller-described resource, and writes a real audit event for the
-decision), `GET /api/audit/recent`, `GET /api/audit/verify`.
-
-**What is deliberately not built yet, visibly, not silently:** task/agent submission,
-cancellation, and the SSE stream that would carry their progress (there is no task system
-yet for it to stream); artifacts and admin endpoints; the `worker` and `sandbox` services
-in the table above; the tool chokepoint itself (`packages/tools/AGENTS.md`) and receipt
-issuance, which is why `try_policy` always evaluates with `receipt.valid=False` and takes
-over that one "record the decision" responsibility from the not-yet-built chokepoint in
-the meantime, explicitly, in its own docstring.
+`python -m citadel_worker missing-models` answers "which approved models does the runtime
+lack" from the registry and the runtime alone (exit 2: the runtime is not answering); the
+launchers ask it rather than guessing.
 
 ## Thin by design
 

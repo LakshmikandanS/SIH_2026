@@ -1,0 +1,28 @@
+[project]
+name = "citadel-worker"
+version = "0.0.0"
+description = "Task workers (the agent loop) and the ingestion loop."
+requires-python = ">=3.12"
+
+dependencies = [
+    "citadel-contracts",
+    "citadel-platform",
+    "citadel-gateway",
+    "citadel-knowledge",
+    "citadel-tools",
+    "citadel-runtime",
+    "citadel-sovereignty",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+citadel-contracts = { workspace = true }
+citadel-platform = { workspace = true }
+citadel-gateway = { workspace = true }
+citadel-knowledge = { workspace = true }
+citadel-tools = { workspace = true }
+citadel-runtime = { workspace = true }
+citadel-sovereignty = { workspace = true }

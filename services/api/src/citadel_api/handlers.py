@@ -44,7 +44,13 @@ async def health(request: Request) -> Response:
     profile this process loaded, proving the registry actually parsed."""
     state = _state(request)
     return JSONResponse(
-        {"status": "ok", "service": "citadel-api", "profile": state.registry.profile.name}
+        {
+            "status": "ok",
+            "service": "citadel-api",
+            "profile": state.registry.profile.name,
+            "sovereign": state.registry.profile.sovereign,
+            "sandbox": "container" if state.sandbox is not None else "process",
+        }
     )
 
 
@@ -60,6 +66,7 @@ async def list_registry_tools(request: Request) -> Response:
             "required_capabilities": list(t.required_capabilities),
             "classification_ceiling": t.classification_ceiling,
             "requires_receipt": t.requires_receipt,
+            "description": t.description,
         }
         for t in state.registry.tools
     ]
@@ -159,25 +166,17 @@ async def whoami(request: Request) -> Response:
 
 
 async def try_policy(request: Request) -> Response:
-    """The ACL/policy demonstration (ADR-0001 §Q7; web/AGENTS.md's "ACL
-    surface"). Evaluates the real `registry/policy.yaml` rules -- the same
-    pure `citadel_tools.policy.evaluate()` the not-yet-built chokepoint will
-    call -- against the caller's *actual* verified identity and a resource
-    the caller describes; the caller only ever chooses which resource and
-    tool to try, never their own role or clearance. Writes a real audit
-    event for the decision either way (PLAN-M0 task 8's third Done clause),
-    taking over that one responsibility from the chokepoint until it
-    exists: a documented stand-in, not a permanent home for it (see
-    `packages/tools/AGENTS.md`).
+    """The ACL/policy demonstration (ADR-0001 §Q7; web/AGENTS.md's "ACL surface").
+    Evaluates the real `registry/policy.yaml` rules -- the same pure
+    `citadel_tools.policy.evaluate()` the chokepoint calls -- against the caller's
+    *actual* verified identity and a resource the caller describes; the caller only
+    ever chooses which resource and tool to try, never their own role or clearance.
 
-    `receipt.valid` is always `False` here: nothing in this checkpoint
-    issues or verifies a receipt yet (M3-M4 work). A tool with
-    `requires_receipt: true` (docs.search, docs.read, code.run,
-    vision.extract, doc.generate) will therefore deny on
-    `deny-missing-receipt` once it clears clearance/ACL/tool-ceiling --
-    an accurate reflection of what is and is not built yet, not a bug here.
-    Try `fs.read`, `sheet.read` or `calc.evaluate` (`requires_receipt:
-    false`) to see a real allow.
+    It answers exactly the question the chokepoint asks before it issues a receipt:
+    would this be allowed, given a valid receipt? For a tool that requires one, an
+    ALLOW here is the point at which the chokepoint would sign a receipt bound to this
+    resource's digest -- and the boundary that acts would verify it. The decision is
+    written to the audit chain either way.
     """
     state = _state(request)
     user = require_user(request, state)
@@ -222,7 +221,7 @@ async def try_policy(request: Request) -> Response:
     except PolicyEvaluationError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
-    receipt = ReceiptFacts(valid=False)
+    receipt = ReceiptFacts(valid=True)
     decision = evaluate(
         state.registry.policy, actor=actor, resource=resource, tool=tool, receipt=receipt
     )
@@ -242,6 +241,7 @@ async def try_policy(request: Request) -> Response:
             "effect": decision.effect,
             "rule_id": decision.rule_id,
             "reason": decision.reason,
+            "surface": "policy.try",
         },
     )
 
@@ -252,6 +252,11 @@ async def try_policy(request: Request) -> Response:
                 "rule_id": decision.rule_id,
                 "reason": decision.reason,
             },
+            "receipt": (
+                "a receipt bound to this resource would be issued and verified by the executing boundary"
+                if decision.allowed and tool.requires_receipt
+                else "this tool needs no receipt" if not tool.requires_receipt else "no receipt: denied"
+            ),
             "audit_seq": seq,
             "actor": {
                 "role": actor.role,

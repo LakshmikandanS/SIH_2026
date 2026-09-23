@@ -14,6 +14,8 @@ dependencies = [
     "citadel-deliverables",
     "citadel-sovereignty",
     "citadel-api",
+    "citadel-worker",
+    "citadel-sandbox",
 ]
 
 [dependency-groups]
@@ -25,7 +27,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/*", "services/api"]
+members = ["packages/*", "services/api", "services/worker", "services/sandbox"]
 
 [tool.uv.sources]
 citadel-contracts    = { workspace = true }
@@ -38,9 +40,11 @@ citadel-runtime      = { workspace = true }
 citadel-deliverables = { workspace = true }
 citadel-sovereignty  = { workspace = true }
 citadel-api          = { workspace = true }
+citadel-worker       = { workspace = true }
+citadel-sandbox      = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages"]
+testpaths = ["tests", "packages", "services"]
 # --strict-markers: a mistyped marker should fail, not silently register as a new one.
 #
 # --import-mode=importlib: every package's tests/ has no __init__.py (see the mypy
@@ -74,7 +78,7 @@ markers = [
 # individually-listed directories, not every test directory, so it does not
 # reintroduce the collision. pg_scratch.py is deliberately not named conftest.py --
 # see that file's own docstring for why a second conftest.py doesn't work here.
-pythonpath = ["tests/structural", "packages/platform/tests"]
+pythonpath = ["tests/structural", "packages/platform/tests", "tests/fakes"]
 
 [tool.ruff]
 target-version = "py312"
@@ -149,6 +153,17 @@ module = [
     "test_policy",
     "test_psql_client",
     "test_identity_store",
+    "test_db",
+    "test_gateway_routing",
+    "test_knowledge",
+    "test_deliverables",
+    "test_chokepoint",
+    "test_sovereignty",
+    "test_agent",
+    "test_api",
+    "test_sandbox_service",
+    "test_worker_seed",
+    "test_image_contents",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
@@ -163,4 +178,19 @@ disallow_untyped_decorators = false
 # override silences, specifically for this one library rather than repo-wide.
 [[tool.mypy.overrides]]
 module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
+
+# The same import-untyped gap as PyYAML above, for the document, OCR and telemetry
+# libraries the knowledge, deliverables and sovereignty packages use: none of these
+# ships a py.typed marker (python-docx, pdfplumber, Pillow and httpx do, and are
+# type-checked for real). Scoped to exactly these modules, never repo-wide.
+[[tool.mypy.overrides]]
+module = [
+    "openpyxl", "openpyxl.*",
+    "lxml", "lxml.*",
+    "pytesseract", "pytesseract.*",
+    "pypdfium2", "pypdfium2.*",
+    "psutil", "psutil.*",
+    "jsonschema", "jsonschema.*",
+]
 ignore_missing_imports = true
