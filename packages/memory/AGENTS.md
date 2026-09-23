@@ -56,6 +56,14 @@ no implementation. M5 needs them; that is the deadline. M0–M4 are not blocked.
 Write the interface now, in Citadel's vocabulary, so that when Monarch changes the
 integration is an implementation and not a redesign.
 
+**Built.** `WorkingMemory(db, task_id)` keeps `put`, `get`, `all` and a bounded `append`
+in Postgres. The agent keeps its plan and revision request there, and resumption reads
+them back alongside the journal. `EpisodicMemory` and `SemanticMemory` are Protocols in
+Citadel's vocabulary (`MemoryScope`, `MemoryRecord`, with the scope as part of every
+call). Their only implementation is `Unconfigured`, which raises `MemoryNotConfigured`
+instead of returning an empty result that would look like "nothing remembered". `status()`
+says which tiers exist. Nothing is wired to Monarch.
+
 ## Vocabulary
 
 Monarch's `MemoryType` is person-centric (`USER_PREFERENCE`, `PERSONAL_FACT`,

@@ -86,3 +86,28 @@ hung.
 
 Queue, worker pool, durable journal, SSE for progress, real cancellation. The prototype ran
 whole agentic tasks inside one request and told users to expect 20–40 seconds.
+
+## Built
+
+- **Planner.** It sees the real goal, the tools this actor may use for this task
+  (`Chokepoint.available`) and the template guides. It produces a JSON plan with no fixed
+  shape, validated against a schema whose tool and template enums come from the registry.
+- **Loop.** One action per step, validated against a schema whose tool enum lists only
+  the available tools. It goes through the chokepoint, and the observation is harvested
+  by output shape (`evidence`, `artifacts`, `summary`). Replanning happens when
+  observations call for it. The finish step is checked for unknown citations and for a
+  deliverable the plan promised.
+- **Journal.** Step types: `submitted`, `claimed`, `model_call` (with the routing
+  decision), `planned`, `replanned`, `thought`, `tool_call`, `tool_result`, `waiting`,
+  `progress`, `revision`, `revision_requested`, `decision`, `probe`, `cancel_requested`,
+  `finished`, `failed` and `cancelled`. A reclaimed stale task resumes from its journal
+  and working memory.
+- **Budgets.** Steps, tokens and wall clock (`BudgetLimits`), checked every iteration.
+  Waiting on GPU admission is journalled as `waiting` with the queue depth.
+- **Worker pool.** `claim_next` uses `FOR UPDATE SKIP LOCKED`, reclaims stale tasks after
+  the heartbeat lapses, and keeps a heartbeat thread. Cancellation takes effect at the
+  next check.
+- **Revision.** A rejected deliverable returns the task with the approver's comment for
+  one bounded revision (`citadel_runtime.worker.MAX_REVISIONS = 1`).
+- **Degrading honestly.** When no model is eligible, or the runtime fails, the task
+  fails with the reason; nothing is substituted silently.
