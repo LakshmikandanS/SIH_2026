@@ -36,3 +36,8 @@ cost someone a day, and the error will surface as a routing decision nobody can 
 Entries carry `enabled: false` until a human approves the download by name, quantisation
 and VRAM cost. Fahim has asked to approve these explicitly. An agent proposing a model
 proposes it in a message and waits; it does not add `enabled: true` and run a pull.
+
+The approval is recorded where the entry is: `models.demo-local.yaml`'s header names who
+approved which models, when, and at what size, and each enabled entry points back to it.
+Enabling is still not pulling -- a person starts the download (the "Pull missing models"
+button, or `ollama pull`), and the gateway never pulls on its own.

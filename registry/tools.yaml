@@ -9,13 +9,14 @@
 # -- "restricted" was never a real level and was a registry bug, fixed here the same
 # way as the identical bug in models.demo-local.yaml. The split that remains is real,
 # not an oversight: docs.search, docs.read, vision.extract and doc.generate touch the
-# confidential corpus directly and are capped at CONFIDENTIAL; fs.*, sheet.*, code.run
-# and calc.evaluate only ever touch task-workspace scratch files, sandboxed execution
-# or a calculator, never the source corpus, and stay capped at INTERNAL -- least
-# privilege, not a limitation anyone forgot to lift.
+# confidential corpus directly and are capped at CONFIDENTIAL; fs.*, sheet.* and code.run
+# only ever touch task-workspace scratch files or sandboxed execution, never the source
+# corpus, and stay capped at INTERNAL -- least privilege, not a limitation anyone forgot
+# to lift. calc.evaluate is capped at CONFIDENTIAL; its own entry says why.
 
 tools:
   - name: docs.search
+    description: "Search the permitted document corpus; returns passages with evidence ids to cite."
     package: citadel_tools.docs
     side_effect: read
     required_capabilities: [retrieval]
@@ -27,9 +28,10 @@ tools:
       additionalProperties: false
       properties:
         query:  { type: string, minLength: 1 }
-        top_k:  { type: integer, minimum: 1, maximum: 50, default: 10 }
+        top_k:  { type: integer, minimum: 1, maximum: 50, default: 8 }
 
   - name: docs.read
+    description: "Read one page of a document (document_id from search results); returns its blocks and evidence ids."
     package: citadel_tools.docs
     side_effect: read
     required_capabilities: [retrieval]
@@ -45,6 +47,7 @@ tools:
         page:        { type: integer, minimum: 1 }
 
   - name: fs.read
+    description: "Read a file, or list a folder, in this task's scratch workspace."
     package: citadel_tools.fs
     side_effect: read
     required_capabilities: [workspace]
@@ -58,6 +61,7 @@ tools:
         path: { type: string, description: "Relative to the task workspace root" }
 
   - name: fs.write
+    description: "Write a text file in this task's scratch workspace."
     package: citadel_tools.fs
     side_effect: write
     required_capabilities: [workspace]
@@ -72,6 +76,7 @@ tools:
         content: { type: string }
 
   - name: code.run
+    description: "Run Python in the isolated sandbox (no network); workspace files are available and files it writes come back."
     package: citadel_tools.code
     side_effect: execute
     required_capabilities: [sandbox]
@@ -86,6 +91,7 @@ tools:
         timeout_s:  { type: integer, minimum: 1, maximum: 120, default: 30 }
 
   - name: sheet.read
+    description: "Read an .xlsx or .csv file in the workspace as rows."
     package: citadel_tools.sheet
     side_effect: read
     required_capabilities: [workspace]
@@ -100,6 +106,7 @@ tools:
         sheet: { type: string }
 
   - name: sheet.write
+    description: 'Write cells (e.g. {"A1": 1}, or {"rows": [[...]]}) to an .xlsx or .csv in the workspace.'
     package: citadel_tools.sheet
     side_effect: write
     required_capabilities: [workspace]
@@ -115,6 +122,7 @@ tools:
         cells: { type: object }
 
   - name: vision.extract
+    description: "Re-read a region of a scanned page with the vision model; returns a citable reading."
     package: citadel_tools.vision
     side_effect: read
     required_capabilities: [vision]
@@ -133,6 +141,7 @@ tools:
       (ADR-0001 Gap 2). On demo-local this call is budgeted as a model swap.
 
   - name: doc.generate
+    description: "Fill a deliverable template with content (citations inline, e.g. [E2]) and run its four-tier verification."
     package: citadel_tools.doc
     side_effect: write
     required_capabilities: [doc_generation]
@@ -148,10 +157,17 @@ tools:
         citations:   { type: array, items: { type: object } }
 
   - name: calc.evaluate
+    description: "Evaluate arithmetic with recorded working; returns the result and a citable C id."
     package: citadel_tools.calc
     side_effect: read
     required_capabilities: []
-    classification_ceiling: internal
+    # Raised from internal when the calculator was built: it is a pure, in-process
+    # evaluator -- no files, no network, no sandbox -- whose only output is the working
+    # it records as task evidence at the task's own classification. Capping it below the
+    # corpus ceiling left CONFIDENTIAL tasks computing remaining life in a model's head,
+    # which is exactly the ungrounded arithmetic this tool exists to remove. fs.*,
+    # sheet.* and code.run stay at internal.
+    classification_ceiling: confidential
     requires_receipt: false
     schema:
       type: object

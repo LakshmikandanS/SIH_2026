@@ -1,0 +1,56 @@
+# The seeded demonstration corpus (ops/demo/make_corpus.py generates the files).
+#
+# Every entry declares classification and ACL explicitly -- the seed path goes through
+# the same upload validation as a human upload, and that path rejects anything that
+# does not. `uploaded_by` is one of migration 0006's identities, and each document is
+# within its uploader's clearance.
+#
+# Who sees what for a query like "E-101 corrosion" (ADR-0001 §Q7):
+#   demo-engineer-1  internal, process-engineering  -> IR-0147, P-310, CS-12, nameplate
+#                    denied: INC-0092 (classification), UT-0311 (classification + ACL)
+#   demo-engineer-2  confidential, instrumentation  -> IR-0147, UT-0311, PT-4471, CS-12, nameplate
+#                    denied: INC-0092 (ACL), P-310 (ACL)
+#   demo-approver    confidential, quality-assurance -> IR-0147, UT-0311, INC-0092, CS-12, nameplate
+
+documents:
+  - file: IR-2026-0147_E-101_inspection_report.pdf
+    title: "Inspection report IR-2026-0147 - heat exchanger E-101 (scanned)"
+    classification: internal
+    acl: [process-engineering, instrumentation, quality-assurance]
+    uploaded_by: demo-engineer-1
+
+  - file: UT-2026-0311_V-204_thickness_survey.pdf
+    title: "UT thickness survey UT-2026-0311 - pressure vessel V-204"
+    classification: confidential
+    acl: [instrumentation, quality-assurance]
+    uploaded_by: demo-engineer-2
+
+  - file: P-310_maintenance_history.pdf
+    title: "Maintenance history - pump P-310"
+    classification: internal
+    acl: [process-engineering]
+    uploaded_by: demo-engineer-1
+
+  - file: CS-12_corrosion_allowance_standard.pdf
+    title: "Standard CS-12 - corrosion allowance and remaining life"
+    classification: public
+    acl: [process-engineering, instrumentation, quality-assurance]
+    uploaded_by: demo-approver
+
+  - file: PT-4471_calibration_record.pdf
+    title: "Calibration record - pressure transmitter PT-4471 (scanned)"
+    classification: confidential
+    acl: [instrumentation]
+    uploaded_by: demo-engineer-2
+
+  - file: INC-2026-0092_E-101_flange_leak.pdf
+    title: "Incident report INC-2026-0092 - flange leak at E-101 inlet"
+    classification: confidential
+    acl: [process-engineering, quality-assurance]
+    uploaded_by: demo-approver
+
+  - file: V-204_nameplate_photo.png
+    title: "Nameplate photograph - pressure vessel V-204"
+    classification: internal
+    acl: [process-engineering, instrumentation, quality-assurance]
+    uploaded_by: demo-engineer-2

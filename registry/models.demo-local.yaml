@@ -4,6 +4,16 @@
 # approves the download by name, quantisation and VRAM cost. Tags below are
 # CANDIDATES and must be verified against the runtime before enabling.
 #
+# APPROVED 2026-09-21 by Fahim, in the build conversation ("i permit u to download
+# needed model in ollama"): reason-general (qwen3:4b, Ollama default Q4_K_M, ~2.6 GB),
+# reason-code (qwen2.5-coder:3b, Q4_K_M, ~1.9 GB), vision-doc (granite3.2-vision:2b,
+# ~2.4 GB, swapped in at ingest) and embed-text (nomic-embed-text, ~0.3 GB) -- the set
+# the demonstration needs. They are enabled below. Enabling is not pulling: the
+# download still happens only when a person presses "Pull missing models" (web UI,
+# Models & routing) or runs `ollama pull` themselves. reason-large (qwen2.5:7b,
+# ~4.7 GB, cannot co-reside on 8 GB) is NOT approved and stays disabled; it is an
+# optional fallback, not something any flow needs.
+#
 # Budget check (ADR-0001 Gap 1):
 #   reasoning 2.6 + coding 1.9 + embedding 0.3 + KV ~1.5  =  ~6.3 GB of ~7.3 GB
 # Vision does not co-reside; it swaps, and it runs at INGEST not in the agent loop.
@@ -20,7 +30,7 @@
 
 models:
   - id: reason-general
-    enabled: false
+    enabled: true                      # approved 2026-09-21 (see header)
     tag: "qwen3:4b"                    # CANDIDATE — verify tag before pull
     runtime: ollama
     modalities: [text]
@@ -33,7 +43,7 @@ models:
     fallback: [reason-large]
 
   - id: reason-code
-    enabled: false
+    enabled: true                      # approved 2026-09-21 (see header)
     tag: "qwen2.5-coder:3b"            # CANDIDATE
     runtime: ollama
     modalities: [text]
@@ -60,7 +70,7 @@ models:
     fallback: [reason-general]
 
   - id: vision-doc
-    enabled: false
+    enabled: true                      # approved 2026-09-21 (see header)
     tag: "granite3.2-vision:2b"        # CANDIDATE — IBM Granite Vision, document-oriented
     runtime: ollama
     modalities: [text, image]
@@ -74,7 +84,7 @@ models:
     fallback: []
 
   - id: embed-text
-    enabled: false
+    enabled: true                      # approved 2026-09-21 (see header)
     tag: "nomic-embed-text"            # CANDIDATE
     runtime: ollama                    # may move to app-box CPU; see below
     modalities: [text]

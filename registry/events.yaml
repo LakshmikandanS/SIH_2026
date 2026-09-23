@@ -26,6 +26,7 @@ events:
   - { name: model.fallback_used,  severity: warning, audit: true,  trace: true }
   - { name: model.degraded,       severity: warning, audit: true,  trace: true }
   - { name: model.swapped,        severity: info,    audit: false, trace: true }
+  - { name: model.pull_requested, severity: info,    audit: true,  trace: true }   # a person started a download
 
   # --- task runtime ---
   - { name: task.submitted,       severity: info,    audit: true,  trace: true }
@@ -48,3 +49,4 @@ events:
   - { name: egress.attempt,       severity: warning, audit: true,  trace: true }
   - { name: egress.blocked,       severity: warning, audit: true,  trace: true }
   - { name: dns.denied,           severity: warning, audit: true,  trace: true }
+  - { name: sovereignty.probe,    severity: info,    audit: true,  trace: true }   # the deliberate probe was run
