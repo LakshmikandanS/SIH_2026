@@ -29,11 +29,12 @@ from citadel_contracts.identity import (
 from citadel_gateway import Gateway, build_provider
 from citadel_platform.audit.log import AuditLog
 from citadel_platform.db import Database
-from citadel_platform.keyring import load_session_key
+from citadel_platform.keyring import load_receipt_public_key, load_receipt_signing_key, load_session_key
 from citadel_platform.registry import Registry, load_registry
 from citadel_platform.storage import DataDir
 from citadel_platform.tracing import Tracer
 from citadel_sovereignty import HttpSandboxRunner, Sovereignty, install
+from citadel_tools import Chokepoint, DataBoundary
 
 #: ADR-0004: M0 targets demo-local only -- "one machine... running everything."
 _DEFAULT_PROFILE = "demo-local"
@@ -72,6 +73,10 @@ class AppState:
     sovereignty: Optional[Sovereignty]
     sandbox: Optional[HttpSandboxRunner]
     web_dir: Path
+    #: A person working on a task runs tools through the same chokepoint, with the same
+    #: receipts, as an agent does. None only when this box has no receipt keys yet.
+    chokepoint: Optional[Chokepoint] = None
+    boundary: Optional[DataBoundary] = None
 
 
 def load_app_state(env: Optional[Mapping[str, str]] = None, *, install_sovereignty: bool = True) -> AppState:
@@ -96,6 +101,7 @@ def load_app_state(env: Optional[Mapping[str, str]] = None, *, install_sovereign
     tracer = Tracer(db)
     provider, notes = build_provider(registry, environ)
     sandbox_url = environ.get("CITADEL_SANDBOX_URL") or ""
+    chokepoint, boundary = _tool_door(registry, environ)
     sovereignty = None
     if install_sovereignty:
         sovereignty = install(
@@ -116,7 +122,21 @@ def load_app_state(env: Optional[Mapping[str, str]] = None, *, install_sovereign
         sovereignty=sovereignty,
         sandbox=HttpSandboxRunner(sandbox_url) if sandbox_url else None,
         web_dir=Path(environ.get("CITADEL_WEB_DIR") or _repo_root() / "web" / "src"),
+        chokepoint=chokepoint,
+        boundary=boundary,
     )
+
+
+def _tool_door(registry: Registry, environ: Mapping[str, str]) -> tuple[Optional[Chokepoint], Optional[DataBoundary]]:
+    """The chokepoint a person's tool runs go through -- the same registry, the same rule
+    table, the same receipts as the worker's. Without the receipt keys a person can still
+    read and write notes; running tools is refused, and says why."""
+    try:
+        return (Chokepoint(registry, signing_key=load_receipt_signing_key(environ)),
+                DataBoundary(load_receipt_public_key(environ)))
+    except Exception as exc:  # a key missing or unreadable: the rest of the API still serves
+        print(f"[citadel-api] people cannot run tools on tasks: {str(exc)[:200]}", flush=True)
+        return None, None
 
 
 class AuthError(Exception):

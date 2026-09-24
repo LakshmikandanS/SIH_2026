@@ -1,6 +1,7 @@
 """Build the constructed deliverable templates in registry/templates/ (ADR-0001 §Q11).
 
-    python ops/templates/make_templates.py
+    python ops/templates/make_templates.py            # writes only the templates that are missing
+    python ops/templates/make_templates.py --force    # rewrites every template
 
 "Fix the template first, by hand, as an artefact nobody may simplify; then make the
 generator match it." These files ARE that fixed artefact: letterhead, classification
@@ -139,10 +140,10 @@ def _row_table(document: Document, headers: list[str], placeholder: str, widths_
     return table
 
 
-def _sources(document: Document, number: int) -> None:
+def _sources(document: Document, number: int | None) -> None:
     heading = document.add_paragraph()
     heading.paragraph_format.space_before = Pt(10)
-    _run(heading, f"{number}. Sources", bold=True, size=12, color=NAVY)
+    _run(heading, f"{number}. Sources" if number else "Sources", bold=True, size=12, color=NAVY)
     note = document.add_paragraph()
     _run(note, "Each bracketed reference in this document resolves to the source below: the exact "
                "document version, page and region the statement was drawn from.", size=8.5)
@@ -225,6 +226,36 @@ def inspection_summary() -> None:
     document.save(OUT / "inspection-summary.docx")
 
 
+def report() -> None:
+    """A report shaped by its request: a title, a summary, then as many sections as the
+    person asked for -- each with the heading the writer chose -- then recommendations
+    and open questions. The body is ONE block placeholder the generator expands into
+    sub-headings and paragraphs; everything around it is fixed, marked and numbered."""
+    document = Document()
+    _header_footer(document, "Report")
+    _banner(document, "REPORT")
+    _control_table(document, [])
+    heading = document.add_paragraph()
+    heading.paragraph_format.space_before = Pt(10)
+    _run(heading, "Summary", bold=True, size=12, color=NAVY)
+    body = document.add_paragraph()
+    _run(body, "{{summary}}")
+    rule = document.add_paragraph()
+    rule.paragraph_format.space_before = Pt(6)
+    body = document.add_paragraph()
+    _run(body, "{{body}}")
+    for title, key in (("Recommendations", "recommendations"), ("Open questions", "open_questions")):
+        heading = document.add_paragraph()
+        heading.paragraph_format.space_before = Pt(10)
+        _run(heading, title, bold=True, size=12, color=NAVY)
+        block = document.add_paragraph()
+        _run(block, "{{" + key + "}}")
+    _sources(document, None)
+    _revision_history(document)
+    document.core_properties.title = "Report (Citadel constructed template)"
+    document.save(OUT / "report.docx")
+
+
 def calculation_sheet() -> None:
     workbook = Workbook()
     sheet = workbook.active
@@ -301,13 +332,28 @@ def calculation_sheet() -> None:
     workbook.save(OUT / "calculation-sheet.xlsx")
 
 
-def main() -> None:
+BUILDERS = {
+    "approval-note.docx": approval_note,
+    "inspection-summary.docx": inspection_summary,
+    "calculation-sheet.xlsx": calculation_sheet,
+    "report.docx": report,
+}
+
+
+def main(argv: list[str] | tuple[str, ...] = ()) -> None:
+    """Existing templates are left alone unless --force: an artifact's provenance names the
+    template it was filled from, and a template rebuilt for no reason is a new template."""
+    force = "--force" in argv
     OUT.mkdir(parents=True, exist_ok=True)
-    approval_note()
-    inspection_summary()
-    calculation_sheet()
-    print(f"templates written to {OUT}")
+    written = []
+    for name, build in BUILDERS.items():
+        if force or not (OUT / name).exists():
+            build()
+            written.append(name)
+    print(f"templates in {OUT}: wrote {len(written)}" + (f": {', '.join(written)}" if written else ""))
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(sys.argv[1:])

@@ -24,6 +24,7 @@ from pathlib import Path
 
 from citadel_gateway import Gateway, build_provider
 from citadel_knowledge.seed import seed_corpus
+from citadel_platform import heartbeat
 from citadel_platform.identity.store import get_user_by_external_identity
 from citadel_runtime import Worker
 
@@ -50,6 +51,25 @@ def seed(services: WorkerServices) -> dict[str, object]:
     )
 
 
+def seed_until_settled(services: WorkerServices, stop: threading.Event, first: dict[str, object] | None = None) -> None:
+    """A later issue of a document (Policy 1 revision 2, say) is filed only once the issue
+    before it has been ingested, so seeding repeats until nothing is left waiting."""
+    summary = first if first is not None else seed(services)
+    if first is None:
+        print(f"[worker] demo corpus: {summary}", flush=True)
+    delay = 5.0
+    while summary.get("waiting") and not stop.is_set():
+        stop.wait(delay)
+        delay = min(delay * 1.5, 30.0)
+        try:
+            summary = seed(services)
+        except Exception as exc:
+            print(f"[worker] could not file the waiting documents yet: {exc}", file=sys.stderr, flush=True)
+            continue
+        if summary.get("versioned") or summary.get("created"):
+            print(f"[worker] demo corpus: {summary}", flush=True)
+
+
 def seed_when_models_ready(services: WorkerServices, stop: threading.Event) -> None:
     """Register the demo corpus once every approved model is installed (module docstring)."""
     announced = False
@@ -58,7 +78,7 @@ def seed_when_models_ready(services: WorkerServices, stop: threading.Event) -> N
         try:
             missing = [model.id for model in services.gateway.missing_models()]
             if not missing:
-                print(f"[worker] demo corpus: {seed(services)}", flush=True)
+                seed_until_settled(services, stop)
                 return
             if not announced:
                 print(
@@ -95,10 +115,14 @@ def main(argv: list[str] | None = None) -> int:
     services = build()
     wait_for_database(services.db)
     seed_mode = os.environ.get("CITADEL_SEED_CORPUS", "")
+    summary: dict[str, object] | None = None
     if args[:1] == ["seed"] or seed_mode == "now":
         summary = seed(services)
         print(f"[worker] demo corpus: {summary}", flush=True)
         if args[:1] == ["seed"]:
+            if summary.get("waiting"):
+                print("[worker] the documents still waiting are filed by the serving worker once the issue "
+                      "before each has been ingested", flush=True)
             return 0
     stop = threading.Event()
 
@@ -111,9 +135,16 @@ def main(argv: list[str] | None = None) -> int:
         threading.Thread(target=target, args=(services, stop), name=name, daemon=True).start()
     if seed_mode == "1":
         threading.Thread(target=seed_when_models_ready, args=(services, stop), name="seed", daemon=True).start()
+    elif summary is not None and summary.get("waiting"):
+        threading.Thread(target=seed_until_settled, args=(services, stop, summary), name="seed", daemon=True).start()
     concurrency = int(os.environ.get("CITADEL_WORKERS") or 3)
     print(f"[worker] {worker_id()} serving with {concurrency} task thread(s); profile {services.registry.profile.name}", flush=True)
-    Worker(services.runtime, worker_id(), concurrency=concurrency).serve(stop)
+    worker = Worker(services.runtime, worker_id(), concurrency=concurrency)
+    heartbeat.start(services.db, "worker", stop=stop, detail=lambda: {
+        "running_tasks": len(worker.running()), "task_threads": concurrency,
+        "gpu_admission": services.gateway.gpu.snapshot(),
+    })
+    worker.serve(stop)
     return 0
 
 

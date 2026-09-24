@@ -205,6 +205,37 @@ class Database:
         """One statement, no result wanted."""
         self._run(render(sql, params).strip().rstrip(";") + ";\n")
 
+    def serialized(
+        self,
+        key: str,
+        statements: Iterable[tuple[str, Optional[Mapping[str, Any]]]],
+        final: Optional[tuple[str, Optional[Mapping[str, Any]]]] = None,
+    ) -> list[dict[str, Any]]:
+        """Run `statements`, then `final` (whose rows are returned), in ONE transaction
+        that first takes a transaction-scoped advisory lock on `key`.
+
+        For read-then-write allocations that concurrent writers must not interleave --
+        two agents of one task numbering evidence E5 at the same moment. Under READ
+        COMMITTED each statement takes a fresh snapshot, so every statement after the
+        lock sees what the previous holder committed.
+        """
+        parts = ["BEGIN;", f"SELECT pg_advisory_xact_lock(hashtext({_quote(key)}));"]
+        for sql, params in statements:
+            parts.append(render(sql, params).strip().rstrip(";") + ";")
+        if final is not None:
+            statement = render(final[0], final[1]).strip().rstrip(";")
+            parts.append(f"WITH __q AS MATERIALIZED (\n{statement}\n) SELECT row_to_json(__q) FROM __q;")
+        parts.append("COMMIT;")
+        rows: list[dict[str, Any]] = []
+        for line in self._run("\n".join(parts) + "\n").splitlines():
+            line = line.strip()
+            if not line:
+                continue  # the lock's void result prints as an empty line
+            parsed = json.loads(line)
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+        return rows
+
     def script(self, statements: Iterable[tuple[str, Optional[Mapping[str, Any]]]]) -> None:
         """Several statements in ONE transaction: all commit or none do.
 

@@ -10,6 +10,7 @@
 
 templates:
   - id: approval-note
+    description: "A formal approval note (subject, background, cited findings and analysis, recommendation) that goes to an approver before release."
     format: docx
     file: templates/approval-note.docx
     classification_markings: true
@@ -26,6 +27,7 @@ templates:
       quantitative_claims: must_cite      # verification tier 4
 
   - id: inspection-summary
+    description: "A summary of one inspection: equipment tag, inspection date, cited observations, a defects table and the disposition."
     format: docx
     file: templates/inspection-summary.docx
     classification_markings: true
@@ -40,7 +42,24 @@ templates:
     grounding:
       quantitative_claims: must_cite
 
+  - id: report
+    description: "A written report whose sections follow what the person asked for, each cited; summary, recommendations and open questions around them."
+    format: docx
+    file: templates/report.docx
+    classification_markings: true
+    approval_block: false      # the author owns it: edit it, or ask the agent to revise it, as often as needed
+    revision_history: true
+    sections:
+      - { key: title,           required: true,  type: text }
+      - { key: summary,         required: true,  type: rich_text, cited: true }
+      - { key: body,            required: true,  type: sections, min_items: 1, cited: true }
+      - { key: recommendations, required: false, type: list, omit_when_empty: true }
+      - { key: open_questions,  required: false, type: list, omit_when_empty: true }
+    grounding:
+      quantitative_claims: must_cite
+
   - id: calculation-sheet
+    description: "An Excel calculation sheet: inputs, cited working, the result and references; goes to an approver."
     format: xlsx
     file: templates/calculation-sheet.xlsx
     classification_markings: true

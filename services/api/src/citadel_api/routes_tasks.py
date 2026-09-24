@@ -40,6 +40,8 @@ async def create_task(request: Request) -> Response:
             profile_ceiling=app.registry.profile.classification_ceiling,
             requirements={k: body[k] for k in ("template_id",) if k in body},
             audit=app.audit,
+            kind=str(body.get("kind") or "task"),
+            title=str(body["title"]) if body.get("title") else None,
         )
     except TaskError as exc:
         return error(str(exc))
@@ -69,14 +71,21 @@ async def task_detail(request: Request) -> Response:
         return error("no such task", 404)
 
     def gather() -> dict[str, Any]:
-        journal = Journal(app.db, task["id"]).entries(limit=2000)
+        journal = Journal(app.db, task["id"]).entries(limit=4000)
+        agents = app.db.query(
+            "SELECT agent_id, name, role, goal, status, current_step, depends_on, findings, evidence FROM task_agents "
+            "WHERE task_id = %(t)s::uuid ORDER BY (agent_id = 'lead'), agent_id", {"t": task["id"]})
+        shared = app.db.query(
+            "SELECT id, kind, content, evidence, agent_id, author, addressed_to, created_at FROM task_shared_state "
+            "WHERE task_id = %(t)s::uuid ORDER BY id", {"t": task["id"]})
         artifacts = app.db.query(
             "SELECT id::text AS id, title, template_id, filename, kind, status, version, requires_approval, "
             "encode(sha256, 'hex') AS sha256, verification, created_at, released_at FROM artifacts "
             "WHERE task_id = %(t)s::uuid ORDER BY created_at",
             {"t": task["id"]},
         )
-        return {"task": task, "journal": journal, "artifacts": artifacts, "evidence": task_evidence(app.db, task["id"])}
+        return {"task": task, "journal": journal, "artifacts": artifacts, "evidence": task_evidence(app.db, task["id"]),
+                "agents": agents, "shared_state": shared}
 
     return JSONResponse(await blocking(gather))
 

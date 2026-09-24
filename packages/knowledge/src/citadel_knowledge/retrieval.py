@@ -172,6 +172,19 @@ def _row_to_hit(row: dict[str, Any]) -> SearchHit:
     )
 
 
+def _folder_clause(params: dict[str, Any], within: Optional[str], outside: Optional[str]) -> str:
+    """Restrict to (or away from) one folder subtree. Folders only narrow what the
+    permission predicate already allows -- they are never a grant."""
+    clause = ""
+    if within:
+        params["fin"] = within.strip("/")
+        clause += " AND (d.folder = %(fin)s OR starts_with(d.folder, %(fin)s || '/'))"
+    if outside:
+        params["fout"] = outside.strip("/")
+        clause += " AND NOT (d.folder = %(fout)s OR starts_with(d.folder, %(fout)s || '/'))"
+    return clause
+
+
 def search(
     db: Database,
     gateway: Optional[Gateway],
@@ -180,9 +193,12 @@ def search(
     *,
     top_k: int = 8,
     task_id: Optional[str] = None,
+    within_folder: Optional[str] = None,
+    outside_folder: Optional[str] = None,
 ) -> SearchResult:
     terms = query_terms(query)
     params: dict[str, Any] = {"levels": scope.allowed_levels(), "dept": scope.department, "k": _CANDIDATES}
+    folders = _folder_clause(params, within_folder, outside_folder)
     stats: dict[str, Any] = {"terms": terms, "degraded": []}
     dense: list[SearchHit] = []
     lexical: list[SearchHit] = []
@@ -205,7 +221,7 @@ def search(
         rows = db.query(
             _SELECT + ", (c.embedding <=> %(qvec)s) AS distance " + _FROM
             + "WHERE d.status = 'ready' AND c.embedding IS NOT NULL AND c.embedding_model = %(model)s AND "
-            + _PERMITTED + " ORDER BY c.embedding <=> %(qvec)s LIMIT %(k)s",
+            + _PERMITTED + folders + " ORDER BY c.embedding <=> %(qvec)s LIMIT %(k)s",
             params,
         )
         for rank, row in enumerate(rows, start=1):
@@ -220,7 +236,7 @@ def search(
         rows = db.query(
             _SELECT + ", ts_rank_cd(c.tsv, to_tsquery('english', %(tsq)s)) AS lexical " + _FROM
             + "WHERE d.status = 'ready' AND c.tsv @@ to_tsquery('english', %(tsq)s) AND "
-            + _PERMITTED + " ORDER BY lexical DESC, c.id LIMIT %(k)s",
+            + _PERMITTED + folders + " ORDER BY lexical DESC, c.id LIMIT %(k)s",
             params,
         )
         for rank, row in enumerate(rows, start=1):
@@ -243,7 +259,8 @@ def search(
         hit.score = rrf * _RRF_K / 2 + 0.5 * coverage
     ranked = sorted(fused.values(), key=lambda h: (-h.score, h.document_id, h.page, h.chunk_id))[:top_k]
 
-    denied = _denied_documents(db, params, has_dense=query_vector is not None, has_terms=bool(terms), max_distance=max_distance)
+    denied = _denied_documents(db, params, has_dense=query_vector is not None, has_terms=bool(terms),
+                               max_distance=max_distance, folders=folders)
     stats.update(
         {
             "dense_candidates": len(dense),
@@ -252,6 +269,8 @@ def search(
             "rerank": "query-term coverage on CPU (cross-encoder not installed)",
             "allowed_levels": [lvl.upper() for lvl in scope.allowed_levels()],
             "department": scope.department,
+            "within_folder": within_folder,
+            "outside_folder": outside_folder,
         }
     )
     result = SearchResult(query=query, hits=ranked, denied=denied, stats=stats)
@@ -267,6 +286,7 @@ def _denied_documents(
     has_dense: bool,
     has_terms: bool,
     max_distance: Optional[float],
+    folders: str = "",
 ) -> list[DeniedDocument]:
     matches: list[str] = []
     if has_terms:
@@ -279,7 +299,7 @@ def _denied_documents(
     rows = db.query(
         "SELECT c.document_id::text AS document_id, c.classification, c.acl, count(*) AS matching_chunks "
         + _FROM
-        + "WHERE d.status = 'ready' AND NOT (" + _PERMITTED + ") AND (" + " OR ".join(matches) + ") "
+        + "WHERE d.status = 'ready' AND NOT (" + _PERMITTED + ") AND (" + " OR ".join(matches) + ") " + folders + " "
         "GROUP BY c.document_id, c.classification, c.acl ORDER BY c.document_id",
         params,
     )
@@ -296,43 +316,45 @@ def _denied_documents(
     ]
 
 
+def _evidence_lock(task_id: str) -> str:
+    return f"citadel:evidence:{task_id}"
+
+
 def register_evidence(db: Database, task_id: str, hits: Sequence[SearchHit]) -> None:
     """Give each hit a short, task-scoped evidence id (E1, E2, ...), reusing the id a
-    chunk already has in this task, so a model cites `E3` rather than copying a UUID."""
+    chunk already has in this task, so a model cites `E3` rather than copying a UUID.
+
+    Numbering happens inside one transaction holding a per-task lock: several agents of
+    one task search at the same time, and two of them must never both hand out E5."""
     if not hits:
         return
-    existing = {
-        str(r["chunk_id"]): str(r["evidence_id"])
-        for r in db.query(
-            "SELECT chunk_id::text AS chunk_id, evidence_id FROM task_evidence "
-            "WHERE task_id = %(t)s::uuid AND kind = 'document'",
-            {"t": task_id},
-        )
-    }
-    count = int(db.scalar(
-        "SELECT count(*) FROM task_evidence WHERE task_id = %(t)s::uuid AND kind = 'document'", {"t": task_id}
-    ) or 0)
-    statements: list[tuple[str, Optional[dict[str, Any]]]] = []
+    statements: list[tuple[str, Optional[Mapping[str, Any]]]] = []
     for hit in hits:
-        if hit.chunk_id in existing:
-            hit.evidence_id = existing[hit.chunk_id]
-            continue
-        count += 1
-        hit.evidence_id = f"E{count}"
-        existing[hit.chunk_id] = hit.evidence_id
         statements.append((
             "INSERT INTO task_evidence (task_id, evidence_id, kind, chunk_id, document_id, version, page, bbox, "
-            "text, classification, detail) VALUES (%(t)s::uuid, %(e)s, 'document', %(chunk)s::uuid, %(doc)s::uuid, "
-            "%(v)s, %(page)s, %(bbox)s, %(text)s, %(c)s, %(detail)s) ON CONFLICT DO NOTHING",
+            "text, classification, detail) SELECT %(t)s::uuid, 'E' || ((SELECT count(*) FROM task_evidence "
+            "WHERE task_id = %(t)s::uuid AND kind = 'document') + 1), 'document', %(chunk)s::uuid, %(doc)s::uuid, "
+            "%(v)s, %(page)s, %(bbox)s, %(text)s, %(c)s, %(detail)s WHERE NOT EXISTS (SELECT 1 FROM task_evidence "
+            "WHERE task_id = %(t)s::uuid AND chunk_id = %(chunk)s::uuid)",
             {
-                "t": task_id, "e": hit.evidence_id, "chunk": hit.chunk_id, "doc": hit.document_id,
+                "t": task_id, "chunk": hit.chunk_id, "doc": hit.document_id,
                 "v": hit.version, "page": hit.page,
                 "bbox": RealArray(hit.bbox) if hit.bbox else None,
                 "text": hit.text, "c": hit.classification, "detail": Json({"title": hit.title}),
             },
         ))
-    if statements:
-        db.script(statements)
+    rows = db.serialized(
+        _evidence_lock(task_id),
+        statements,
+        (
+            "SELECT chunk_id::text AS chunk_id, min(evidence_id) AS evidence_id FROM task_evidence "
+            "WHERE task_id = %(t)s::uuid AND chunk_id = ANY(%(chunks)s::uuid[]) GROUP BY chunk_id",
+            {"t": task_id, "chunks": [hit.chunk_id for hit in hits]},
+        ),
+    )
+    assigned = {str(r["chunk_id"]): str(r["evidence_id"]) for r in rows}
+    for hit in hits:
+        hit.evidence_id = assigned.get(hit.chunk_id)
 
 
 def register_reading(
@@ -349,20 +371,22 @@ def register_reading(
 ) -> str:
     """A region re-read during a task (the vision.extract tool) becomes citable evidence
     of its own, pinned to the same document, version, page and region as any chunk."""
-    count = int(db.scalar(
-        "SELECT count(*) FROM task_evidence WHERE task_id = %(t)s::uuid AND kind = 'document'", {"t": task_id}
-    ) or 0)
-    evidence_id = f"E{count + 1}"
-    db.execute(
-        "INSERT INTO task_evidence (task_id, evidence_id, kind, document_id, version, page, bbox, text, classification, "
-        "detail) VALUES (%(t)s::uuid, %(e)s, 'document', %(d)s::uuid, %(v)s, %(p)s, %(b)s, %(x)s, %(c)s, %(detail)s)",
-        {
-            "t": task_id, "e": evidence_id, "d": document_id, "v": version, "p": page,
-            "b": RealArray(list(bbox)) if bbox else None, "x": text, "c": classification.lower(),
-            "detail": Json(dict(detail)),
-        },
+    rows = db.serialized(
+        _evidence_lock(task_id),
+        [],
+        (
+            "INSERT INTO task_evidence (task_id, evidence_id, kind, document_id, version, page, bbox, text, "
+            "classification, detail) VALUES (%(t)s::uuid, 'E' || ((SELECT count(*) FROM task_evidence "
+            "WHERE task_id = %(t)s::uuid AND kind = 'document') + 1), 'document', %(d)s::uuid, %(v)s, %(p)s, "
+            "%(b)s, %(x)s, %(c)s, %(detail)s) RETURNING evidence_id",
+            {
+                "t": task_id, "d": document_id, "v": version, "p": page,
+                "b": RealArray(list(bbox)) if bbox else None, "x": text, "c": classification.lower(),
+                "detail": Json(dict(detail)),
+            },
+        ),
     )
-    return evidence_id
+    return str(rows[0]["evidence_id"])
 
 
 def register_computation(
@@ -376,16 +400,17 @@ def register_computation(
     """A computed value (calc.evaluate, code.run) becomes citable evidence -- C1, C2 --
     so a derived number in a deliverable traces to its recorded working, not to a
     model's arithmetic."""
-    count = int(db.scalar(
-        "SELECT count(*) FROM task_evidence WHERE task_id = %(t)s::uuid AND kind = 'computation'", {"t": task_id}
-    ) or 0)
-    evidence_id = f"C{count + 1}"
-    db.execute(
-        "INSERT INTO task_evidence (task_id, evidence_id, kind, text, classification, detail) VALUES "
-        "(%(t)s::uuid, %(e)s, 'computation', %(x)s, %(c)s, %(detail)s)",
-        {"t": task_id, "e": evidence_id, "x": text, "c": classification.lower(), "detail": Json(dict(detail))},
+    rows = db.serialized(
+        _evidence_lock(task_id),
+        [],
+        (
+            "INSERT INTO task_evidence (task_id, evidence_id, kind, text, classification, detail) VALUES "
+            "(%(t)s::uuid, 'C' || ((SELECT count(*) FROM task_evidence WHERE task_id = %(t)s::uuid "
+            "AND kind = 'computation') + 1), 'computation', %(x)s, %(c)s, %(detail)s) RETURNING evidence_id",
+            {"t": task_id, "x": text, "c": classification.lower(), "detail": Json(dict(detail))},
+        ),
     )
-    return evidence_id
+    return str(rows[0]["evidence_id"])
 
 
 def task_evidence(db: Database, task_id: str) -> list[dict[str, Any]]:
@@ -429,13 +454,19 @@ def read_page(
         return None
     params = {"id": document_id, "levels": scope.allowed_levels(), "dept": scope.department}
     document = db.query_one(
-        "SELECT id::text AS id, title, filename, classification, acl, version, page_count, status, ingest_report "
-        "FROM documents WHERE id = %(id)s::uuid AND classification = ANY(%(levels)s) AND %(dept)s = ANY(acl)",
+        "SELECT id::text AS id, title, filename, classification, acl, version, page_count, status, ingest_report, "
+        "folder FROM documents WHERE id = %(id)s::uuid AND classification = ANY(%(levels)s) AND %(dept)s = ANY(acl)",
         params,
     )
     if document is None:
         return None
     target_version = version or int(document["version"])
+    if target_version != int(document["version"]):
+        pages = db.scalar(
+            "SELECT count(*) FROM document_pages WHERE document_id = %(id)s::uuid AND version = %(v)s",
+            {"id": document_id, "v": target_version},
+        )
+        document = {**document, "page_count": int(pages or 0)}
     target_page = page or 1
     page_row = db.query_one(
         "SELECT page, width_px, height_px, text_source, ocr_confidence, vision, image_ref IS NOT NULL AS has_image "
@@ -450,11 +481,9 @@ def read_page(
     )
     chunks: list[SearchHit] = []
     if task_id is not None:
-        for row in db.query(
-            _SELECT + _FROM + "WHERE c.document_id = %(id)s::uuid AND c.version = %(v)s AND c.page = %(p)s AND "
-            + _PERMITTED + " ORDER BY c.chunk_index",
-            {**params, "v": target_version, "p": target_page},
-        ):
+        # Any version the caller reads is citable -- an earlier issue of a policy is as
+        # much evidence of what it said then as the current one is of what it says now.
+        for row in _version_chunks(db, params, target_version, target_page):
             chunks.append(_row_to_hit(row))
         register_evidence(db, task_id, chunks)
     return {
@@ -469,10 +498,119 @@ def read_page(
 def visible_documents(db: Database, scope: SearchScope) -> list[dict[str, Any]]:
     return db.query(
         "SELECT id::text AS id, title, filename, mime_type, classification, acl, status, page_count, "
-        "uploaded_by, version, ingest_report, error, created_at FROM documents "
-        "WHERE classification = ANY(%(levels)s) AND %(dept)s = ANY(acl) ORDER BY created_at DESC",
+        "uploaded_by, version, ingest_report, error, created_at, folder FROM documents "
+        "WHERE classification = ANY(%(levels)s) AND %(dept)s = ANY(acl) ORDER BY folder, title",
         {"levels": scope.allowed_levels(), "dept": scope.department},
     )
+
+
+def _version_chunks(db: Database, params: Mapping[str, Any], version: int, page: Optional[int]) -> list[dict[str, Any]]:
+    """The chunks of one version of one document the caller may see (the same predicate
+    as search), whether or not that version is the current one."""
+    page_clause = " AND c.page = %(p)s" if page is not None else ""
+    return db.query(
+        _SELECT + "FROM document_chunks c JOIN documents d ON d.id = c.document_id "
+        "WHERE c.document_id = %(id)s::uuid AND c.version = %(v)s" + page_clause + " AND " + _PERMITTED
+        + " ORDER BY c.page, c.chunk_index",
+        {**params, "v": version, "p": page},
+    )
+
+
+def document_versions(db: Database, scope: SearchScope, document_id: str) -> list[dict[str, Any]]:
+    """Every issue of a document the caller may see, oldest first."""
+    if not is_uuid(document_id):
+        return []
+    return db.query(
+        "SELECT v.version, v.filename, v.change_note, v.effective, v.uploaded_by, v.created_at, "
+        "(v.version = d.version) AS current, "
+        "(SELECT count(*) FROM document_pages p WHERE p.document_id = v.document_id AND p.version = v.version) AS pages "
+        "FROM document_versions v JOIN documents d ON d.id = v.document_id "
+        "WHERE v.document_id = %(id)s::uuid AND d.classification = ANY(%(levels)s) AND %(dept)s = ANY(d.acl) "
+        "ORDER BY v.version",
+        {"id": document_id, "levels": scope.allowed_levels(), "dept": scope.department},
+    )
+
+
+_SENTENCE = re.compile(r"(?<=[.;:])\s+|\n+")
+
+
+def _sentences(rows: Sequence[Mapping[str, Any]]) -> list[tuple[str, int]]:
+    """(normalised sentence, index of the chunk it came from) in reading order."""
+    out: list[tuple[str, int]] = []
+    for index, row in enumerate(rows):
+        for part in _SENTENCE.split(str(row["content"])):
+            text = " ".join(part.split())
+            if len(text) >= 3:
+                out.append((text, index))
+    return out
+
+
+def diff_versions(
+    db: Database,
+    scope: SearchScope,
+    document_id: str,
+    *,
+    from_version: int,
+    to_version: int,
+    task_id: Optional[str] = None,
+    limit: int = 30,
+) -> Optional[dict[str, Any]]:
+    """What changed between two issues of a document, sentence by sentence, each change
+    pinned to the chunk (and so the page and region) it sits in -- and, inside a task,
+    to citable evidence ids for the old and the new wording. Deterministic: the model
+    reads a diff rather than being trusted to spot one."""
+    import difflib
+
+    if not is_uuid(document_id):
+        return None
+    params = {"id": document_id, "levels": scope.allowed_levels(), "dept": scope.department}
+    document = db.query_one(
+        "SELECT id::text AS id, title, version FROM documents WHERE id = %(id)s::uuid "
+        "AND classification = ANY(%(levels)s) AND %(dept)s = ANY(acl)",
+        params,
+    )
+    if document is None:
+        return None
+    old_rows = _version_chunks(db, params, from_version, None)
+    new_rows = _version_chunks(db, params, to_version, None)
+    if not old_rows or not new_rows:
+        return {"document": document, "from_version": from_version, "to_version": to_version, "changes": [],
+                "note": "one of the versions has no readable text"}
+    old_sentences, new_sentences = _sentences(old_rows), _sentences(new_rows)
+    matcher = difflib.SequenceMatcher(a=[t for t, _ in old_sentences], b=[t for t, _ in new_sentences], autojunk=False)
+    changes: list[dict[str, Any]] = []
+    cited_old: dict[int, SearchHit] = {}
+    cited_new: dict[int, SearchHit] = {}
+    for op, a0, a1, b0, b1 in matcher.get_opcodes():
+        if op == "equal":
+            continue
+        removed = old_sentences[a0:a1]
+        added = new_sentences[b0:b1]
+        for text, chunk_index in removed:
+            cited_old.setdefault(chunk_index, _row_to_hit(old_rows[chunk_index]))
+        for text, chunk_index in added:
+            cited_new.setdefault(chunk_index, _row_to_hit(new_rows[chunk_index]))
+        changes.append({
+            "change": {"replace": "changed", "delete": "removed", "insert": "added"}[op],
+            "before": " ".join(t for t, _ in removed) or None,
+            "after": " ".join(t for t, _ in added) or None,
+            "_old_chunks": sorted({i for _, i in removed}),
+            "_new_chunks": sorted({i for _, i in added}),
+        })
+        if len(changes) >= limit:
+            break
+    if task_id is not None:
+        register_evidence(db, task_id, [*cited_old.values(), *cited_new.values()])
+    for change in changes:
+        change["before_evidence"] = [cited_old[i].evidence_id for i in change.pop("_old_chunks") if i in cited_old]
+        change["after_evidence"] = [cited_new[i].evidence_id for i in change.pop("_new_chunks") if i in cited_new]
+    return {
+        "document": document,
+        "from_version": from_version,
+        "to_version": to_version,
+        "changes": changes,
+        "unchanged_sentences": sum(a1 - a0 for op, a0, a1, _, _ in matcher.get_opcodes() if op == "equal"),
+    }
 
 
 def document_facts(db: Database, document_id: str) -> Optional[dict[str, Any]]:
@@ -502,6 +640,8 @@ __all__ = [
     "evidence",
     "read_page",
     "visible_documents",
+    "document_versions",
+    "diff_versions",
     "document_facts",
     "REASON_CLASSIFICATION",
     "REASON_ACL",

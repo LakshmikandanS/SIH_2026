@@ -35,6 +35,21 @@ events:
   - { name: task.step_completed,  severity: info,    audit: false, trace: true }
   - { name: task.budget_exceeded, severity: warning, audit: true,  trace: true }
   - { name: task.cancelled,       severity: info,    audit: true,  trace: true }
+  - { name: task.paused,          severity: info,    audit: true,  trace: true }   # a person paused every agent
+  - { name: task.resumed,         severity: info,    audit: true,  trace: true }
+  - { name: task.human_step,      severity: info,    audit: true,  trace: true }   # a person ran a tool on a task
+  - { name: task.note_added,      severity: info,    audit: true,  trace: true }   # a fact/decision/steer in shared state
+  - { name: task.draft_committed, severity: info,    audit: true,  trace: true }   # an editor draft became a task
+  - { name: task.revision_requested, severity: info, audit: true, trace: true }   # the asker sent the deliverable back with an instruction
+
+  # --- memory (the memory manager's six operations, plus a person's curation) ---
+  - { name: memory.create,        severity: info,    audit: true,  trace: true }
+  - { name: memory.update,        severity: info,    audit: true,  trace: true }
+  - { name: memory.merge,         severity: info,    audit: true,  trace: true }
+  - { name: memory.contradict,    severity: info,    audit: true,  trace: true }
+  - { name: memory.archive,       severity: info,    audit: true,  trace: true }
+  - { name: memory.restore,       severity: info,    audit: true,  trace: true }
+  - { name: memory.edit,          severity: info,    audit: true,  trace: true }
 
   # --- deliverables ---
   - { name: artifact.generated,   severity: info,    audit: true,  trace: true }
@@ -44,6 +59,7 @@ events:
   - { name: approval.accepted,    severity: info,    audit: true,  trace: true }
   - { name: approval.rejected,    severity: info,    audit: true,  trace: true }
   - { name: artifact.released,    severity: info,    audit: true,  trace: true }
+  - { name: artifact.edited,      severity: info,    audit: true,  trace: true }   # a person edited a deliverable; re-verified as a new version
 
   # --- sovereignty ---
   - { name: egress.attempt,       severity: warning, audit: true,  trace: true }

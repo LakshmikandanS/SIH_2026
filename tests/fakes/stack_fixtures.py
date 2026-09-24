@@ -74,17 +74,29 @@ def ingest_corpus(env: Mapping[str, str], data_dir: DataDir, gateway: Gateway) -
     from citadel_platform.identity.store import get_user_by_external_identity
 
     db = Database(env=dict(env))
-    summary = seed_corpus(
-        db,
-        data_dir,
-        CORPUS / "manifest.yaml",
-        profile_ceiling="CONFIDENTIAL",
-        lookup_user=lambda external: get_user_by_external_identity(env, external),
-    )
-    assert summary["rejected"] == [], summary
+
+    def seed() -> dict[str, Any]:
+        summary = seed_corpus(
+            db,
+            data_dir,
+            CORPUS / "manifest.yaml",
+            profile_ceiling="CONFIDENTIAL",
+            lookup_user=lambda external: get_user_by_external_identity(env, external),
+        )
+        assert summary["rejected"] == [], summary
+        return summary
+
     ctx = IngestContext(db=db, data_dir=data_dir, gateway=gateway, audit=None, tracer=Tracer(db), cpu=AdmissionGate("cpu", 2))
-    while (document := claim_next(db, "test")) is not None:
-        ingest(ctx, document)
+    summary = seed()
+    # A later issue of a document is filed once the issue before it is in, as the
+    # serving worker does it: seed, ingest, and seed again until nothing waits.
+    for _ in range(5):
+        while (document := claim_next(db, "test")) is not None:
+            ingest(ctx, document)
+        if not summary["waiting"]:
+            break
+        summary = seed()
+    assert not summary["waiting"], summary
     return db
 
 

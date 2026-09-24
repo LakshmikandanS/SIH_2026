@@ -1,15 +1,17 @@
-"""Working memory; episodic and semantic behind the Monarch seam.
+"""Three tiers of memory, all Citadel-side, all scoped.
 
-Working memory is one task's structured scratchpad -- the plan, the facts an agent has
-decided to keep, what it has already tried -- in Postgres (`task_memory`, migration
-0008), keyed and typed, written deliberately and never as a side effect of a chat turn.
+* **Working** -- one task's structured scratchpad (the plan, the revision request),
+  `task_memory` (migration 0008), written deliberately by the runtime.
+* **Episodic** -- across tasks: outcomes, decisions, rejections.
+* **Semantic** -- durable organisational facts: equipment, costs, vendors, conventions.
 
-Episodic and semantic memory are interfaces only (packages/memory/AGENTS.md): the seam
-in Monarch that would let them be scoped -- a visibility predicate pushed into the query,
-not applied after it -- does not exist yet, and wiring to Monarch as it stands would
-import exactly the post-filtering this repository refuses in retrieval. They are written
-here in Citadel's vocabulary so that the eventual integration is an implementation, not
-a redesign; until then they say plainly that they are not configured.
+The long-term tiers are the memory manager (`manager.py`): Monarch's design -- extract
+candidate memories, decide one of six mutations against the related ones, execute it
+deterministically, retrieve by meaning and recency -- in Citadel's Postgres, with the
+visibility predicate (classification and ACL, like documents) inside the same SQL
+statement as the vector search, which is the seam Monarch's own store still lacks
+(docs/adr/0009). `EpisodicMemory`/`SemanticMemory` stay the Protocols a future
+Monarch-backed store would implement.
 """
 
 from __future__ import annotations
@@ -18,6 +20,20 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from citadel_platform.db import Database, Json
+
+from citadel_memory.consolidate import remember_decision, remember_task
+from citadel_memory.manager import (
+    OPERATIONS,
+    SUGGESTED_TYPES,
+    TIERS,
+    Candidate,
+    Compartment,
+    Memory,
+    MemoryManager,
+    Outcome,
+    allowed_levels,
+)
+from citadel_memory.scope import MemoryScope
 
 
 class MemoryNotConfigured(RuntimeError):
@@ -60,16 +76,6 @@ class WorkingMemory:
 
 
 @dataclass(frozen=True)
-class MemoryScope:
-    """Who may see a memory -- the predicate the Monarch seam must accept and push into
-    its own query. Same two facts as retrieval: department and classification ceiling."""
-
-    department: str
-    classification_max: str
-    actor_id: str
-
-
-@dataclass(frozen=True)
 class MemoryRecord:
     kind: str  # open vocabulary: decision, outcome, rejection, equipment_fact, convention...
     text: str
@@ -93,25 +99,13 @@ class SemanticMemory(Protocol):
     def facts(self, subject: str, scope: MemoryScope) -> Sequence[MemoryRecord]: ...
 
 
-class Unconfigured:
-    """Both long-term tiers until the Monarch seam exists: every call says so."""
-
-    def remember(self, record: MemoryRecord) -> str:
-        raise MemoryNotConfigured("episodic memory waits on the Monarch seam (packages/memory/AGENTS.md)")
-
-    def recall(self, query: str, scope: MemoryScope, *, top_k: int = 5) -> Sequence[MemoryRecord]:
-        raise MemoryNotConfigured("episodic memory waits on the Monarch seam (packages/memory/AGENTS.md)")
-
-    def assert_fact(self, record: MemoryRecord) -> str:
-        raise MemoryNotConfigured("semantic memory waits on the Monarch seam (packages/memory/AGENTS.md)")
-
-    def facts(self, subject: str, scope: MemoryScope) -> Sequence[MemoryRecord]:
-        raise MemoryNotConfigured("semantic memory waits on the Monarch seam (packages/memory/AGENTS.md)")
-
-
 def status() -> dict[str, Optional[str]]:
-    return {"working": "postgres (task_memory)", "episodic": None, "semantic": None,
-            "note": "episodic and semantic tiers wait on the Monarch seam"}
+    return {
+        "working": "postgres (task_memory)",
+        "episodic": "postgres + pgvector (memories, tier episodic)",
+        "semantic": "postgres + pgvector (memories, tier semantic)",
+        "note": "the memory manager: Monarch's extract/mutate/retrieve design in Citadel's scoped store",
+    }
 
 
 __all__ = [
@@ -120,7 +114,17 @@ __all__ = [
     "MemoryRecord",
     "EpisodicMemory",
     "SemanticMemory",
-    "Unconfigured",
     "MemoryNotConfigured",
+    "MemoryManager",
+    "Memory",
+    "Candidate",
+    "Compartment",
+    "Outcome",
+    "OPERATIONS",
+    "TIERS",
+    "SUGGESTED_TYPES",
+    "allowed_levels",
+    "remember_task",
+    "remember_decision",
     "status",
 ]

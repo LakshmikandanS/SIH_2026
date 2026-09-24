@@ -3,8 +3,14 @@
 A model supplies content as loose JSON -- a finding may be a bare string or an object
 with citations, a list may arrive as a single string. This module reduces it to one
 canonical shape per declared section type (`text`, `rich_text`, `list`, `table`,
-`date`, `value`) and records every mismatch as a schema issue rather than guessing.
-Those issues are verification tier 2; nothing here decides whether they are fatal.
+`date`, `value`, `sections`) and records every mismatch as a schema issue rather than
+guessing. Those issues are verification tier 2; nothing here decides whether they are
+fatal.
+
+A `sections` section is the body of a report shaped by its request: a list of
+`{heading, text}` whose headings the writer (an agent, or the person editing it) chooses.
+Each paragraph keeps its own citations, so a reference number lands on the sentence it
+supports and grounding is checked paragraph by paragraph.
 """
 
 from __future__ import annotations
@@ -25,6 +31,8 @@ class Item:
     text: str
     citations: list[str] = field(default_factory=list)
     cells: dict[str, str] = field(default_factory=dict)
+    heading: str = ""                                          # a `sections` item's heading
+    parts: list["Item"] = field(default_factory=list)          # ...and its paragraphs
 
 
 @dataclass
@@ -32,6 +40,8 @@ class Section:
     key: str
     type: str
     items: list[Item] = field(default_factory=list)
+    #: Empty, it leaves the document (heading and all) rather than reading "Not applicable."
+    omit_when_empty: bool = False
 
     @property
     def empty(self) -> bool:
@@ -73,7 +83,7 @@ def _split_inline_citations(text: str) -> tuple[str, list[str]]:
     for marker in _CITATION.findall(text):
         cites.extend(_CITE_ID.findall(marker))
     cleaned = _CITATION.sub("", text)
-    cleaned = re.sub(r"[ \t]+([.,;:])", r"\1", cleaned)  # "leak [E1]." -> "leak."
+    cleaned = re.sub(r"[ \t]+([.,;:)])", r"\1", cleaned)  # "leak [E1]." -> "leak."; "(40% [E3])" -> "(40%)"
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     return cleaned.strip(), cites
 
@@ -96,11 +106,59 @@ def _item(value: Any, issues: list[str], where: str) -> Optional[Item]:
     return None
 
 
+def _subsection(value: Any, issues: list[str], where: str) -> Optional[Item]:
+    """{heading, text} -> an Item whose parts are the text's paragraphs (a line each;
+    list lines keep their bullet), each with its own citations."""
+    if not isinstance(value, Mapping):
+        issues.append(f"{where}: expected an object with 'heading' and 'text', got {type(value).__name__}")
+        return None
+    heading = " ".join(str(value.get("heading") or value.get("title") or "").split())
+    raw_body = value.get("text", value.get("body", value.get("content", value.get("paragraphs"))))
+    if isinstance(raw_body, (list, tuple)):
+        lines = [str(v.get("text", "") if isinstance(v, Mapping) else v) for v in raw_body]
+    else:
+        lines = str(raw_body or "").splitlines()
+    parts: list[Item] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        text, cites = _split_inline_citations(line)
+        if text:
+            parts.append(Item(text=text, citations=list(dict.fromkeys(cites))))
+    extra: list[str] = []
+    for key in ("citations", "citation", "sources", "refs"):
+        if key in value:
+            extra.extend(_citations_from(value[key]))
+    if extra and parts:  # citations given beside the text belong to its last paragraph
+        parts[-1].citations = list(dict.fromkeys([*parts[-1].citations, *extra]))
+    if not heading:
+        issues.append(f"{where}: a section needs a heading")
+    if not parts:
+        issues.append(f"{where}: section '{heading or '?'}' has no text")
+    cites = list(dict.fromkeys(c for part in parts for c in part.citations))
+    return Item(text="\n".join(p.text for p in parts), citations=cites, heading=heading or "Untitled", parts=parts)
+
+
 def _section(spec: TemplateSection, raw: Any, issues: list[str]) -> Section:
-    section = Section(key=spec.key, type=spec.type)
+    section = Section(key=spec.key, type=spec.type, omit_when_empty=spec.omit_when_empty and not spec.required)
     where = f"section '{spec.key}'"
-    if spec.type in ("list", "table"):
+    if spec.type == "sections":
         values: Sequence[Any]
+        if isinstance(raw, (list, tuple)):
+            values = raw
+        elif raw is None:
+            values = []
+        else:
+            issues.append(f"{where}: expected a list of {{heading, text}}, got {type(raw).__name__}; treated as one")
+            values = [raw]
+        for index, value in enumerate(values):
+            item = _subsection(value, issues, f"{where} item {index + 1}")
+            if item is not None:
+                section.items.append(item)
+        if spec.min_items is not None and len(section.items) < spec.min_items:
+            issues.append(f"{where}: needs at least {spec.min_items} section(s), has {len(section.items)}")
+        return section
+    if spec.type in ("list", "table"):
         if isinstance(raw, (list, tuple)):
             values = raw
         elif raw is None:

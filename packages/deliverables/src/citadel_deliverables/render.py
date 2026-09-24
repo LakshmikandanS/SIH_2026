@@ -29,7 +29,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 
 from docx import Document
 from docx.document import Document as DocumentObject
-from docx.shared import RGBColor
+from docx.shared import Pt, RGBColor
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from lxml import etree
@@ -180,9 +180,78 @@ def _section_lines(section: Section, numbers: Mapping[str, int]) -> list[str]:
     return [_cited(item.text, item, numbers) for item in section.items]
 
 
+_BULLET = re.compile(r"^\s*[-*\u2022]\s+")
+_HEADING_COLOUR = RGBColor(0x1D, 0x2B, 0x3A)
+
+
+def _paragraph_after(anchor: Paragraph, model: Any, text: str, *, heading: bool) -> Paragraph:
+    """A new paragraph after `anchor`, cloned from the placeholder's own formatting (so a
+    template's body style carries), set as a sub-heading or as body text."""
+    new_p = deepcopy(model)
+    anchor._p.addnext(new_p)
+    added = Paragraph(new_p, anchor._parent)
+    _style_line(added, text, heading=heading)
+    return added
+
+
+def _style_line(paragraph: Paragraph, text: str, *, heading: bool) -> None:
+    _set_text(paragraph, text)
+    run = paragraph.runs[0]
+    run.bold = True if heading else None
+    if heading:
+        run.font.size = Pt(11.5)
+        run.font.color.rgb = _HEADING_COLOUR
+        paragraph.paragraph_format.space_before = Pt(8)
+        paragraph.paragraph_format.keep_with_next = True
+
+
+def _render_subsections(paragraph: Paragraph, section: Section, numbers: Mapping[str, int]) -> None:
+    """A report body: each section's heading, then its paragraphs, each paragraph with
+    the reference numbers of what it cites."""
+    model = deepcopy(paragraph._p)
+    lines: list[tuple[str, bool]] = []
+    for item in section.items:
+        lines.append((item.heading or EM_DASH, True))
+        for part in item.parts or [item]:
+            text = part.text
+            if _BULLET.match(text):
+                text = "\u2022  " + _BULLET.sub("", text, count=1)
+            lines.append((_cited(text, part, numbers), False))
+    first, *rest = lines
+    _style_line(paragraph, first[0], heading=first[1])
+    anchor = paragraph
+    for text, heading in rest:
+        anchor = _paragraph_after(anchor, model, text, heading=heading)
+
+
+def _is_heading(paragraph: Paragraph) -> bool:
+    """A template's section heading: a short line whose every run is bold (how the
+    constructed templates set them, and how the preview recognises them)."""
+    runs = [r for r in paragraph.runs if r.text.strip()]
+    return bool(runs) and all(r.bold for r in runs) and len(paragraph.text.strip()) < 90
+
+
+def _drop(paragraph: Paragraph) -> None:
+    element = paragraph._p
+    parent = element.getparent()
+    if parent is not None:
+        parent.remove(element)
+
+
 def _render_section(paragraph: Paragraph, section: Section, numbers: Mapping[str, int]) -> None:
     if section.empty:
+        if section.omit_when_empty:
+            previous = paragraph._p.getprevious()
+            if previous is not None and etree.QName(previous).localname == "p":
+                heading = Paragraph(previous, paragraph._parent)
+                if _is_heading(heading):
+                    _drop(heading)
+            _drop(paragraph)
+            return
         _set_text(paragraph, "Not applicable.", italic=True, muted=True)
+        return
+    if section.type == "sections":
+        _render_subsections(paragraph, section, numbers)
         return
     lines = _section_lines(section, numbers)
     _set_text(paragraph, lines[0])

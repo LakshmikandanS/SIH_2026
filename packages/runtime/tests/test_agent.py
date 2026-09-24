@@ -114,7 +114,8 @@ def test_target_b_scanned_report_to_a_verified_approval_note_then_release(world:
     result = task["result"]
     assert result["awaiting_approval"] and result["citations"]
     kinds = [e["step_type"] for e in _journal(world, task["id"])]
-    assert kinds[:3] == ["submitted", "claimed", "model_call"] and "planned" in kinds
+    # the workbench's memory is consulted before the plan is made (and journalled even when empty)
+    assert kinds[:4] == ["submitted", "claimed", "recalled", "model_call"] and "planned" in kinds
     assert kinds.count("tool_result") >= 3 and kinds[-1] == "finished"
     tools = [e["payload"]["tool"] for e in _journal(world, task["id"]) if e["step_type"] == "tool_result"]
     assert tools[:3] == ["docs.search", "calc.evaluate", "doc.generate"]

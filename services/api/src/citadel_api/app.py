@@ -21,7 +21,16 @@ from starlette.staticfiles import StaticFiles
 
 from citadel_platform._psql import PsqlError
 
-from citadel_api import handlers, routes_artifacts, routes_documents, routes_system, routes_tasks
+from citadel_api import (
+    handlers,
+    routes_artifacts,
+    routes_documents,
+    routes_memory,
+    routes_observe,
+    routes_system,
+    routes_tasks,
+    routes_workbench,
+)
 from citadel_api.deps import AppState, AuthError, Forbidden, load_app_state
 
 
@@ -63,11 +72,36 @@ def routes() -> list[Any]:
         Route("/api/tasks/{task_id}/sovereignty", routes_tasks.task_sovereignty, methods=["GET"]),
         Route("/api/tasks/{task_id}/workspace", routes_tasks.task_workspace, methods=["GET"]),
         Route("/api/tasks/{task_id}/workspace/{path:path}", routes_tasks.task_workspace, methods=["GET"]),
+        # people working on a task alongside its agents
+        Route("/api/tasks/{task_id}/revise", routes_workbench.revise_task, methods=["POST"]),
+        Route("/api/tasks/{task_id}/pause", routes_workbench.pause_task, methods=["POST"]),
+        Route("/api/tasks/{task_id}/resume", routes_workbench.resume_task, methods=["POST"]),
+        Route("/api/tasks/{task_id}/notes", routes_workbench.add_note, methods=["POST"]),
+        Route("/api/tasks/{task_id}/tools/{tool}", routes_workbench.run_tool, methods=["POST"]),
+        Route("/api/tasks/{task_id}/state", routes_workbench.task_state, methods=["GET"]),
+        # the workbench: drafts, activity, tools, environment
+        Route("/api/drafts", routes_workbench.drafts_index, methods=["GET"]),
+        Route("/api/drafts", routes_workbench.create_draft, methods=["POST"]),
+        Route("/api/drafts/{draft_id}", routes_workbench.update_draft, methods=["PUT"]),
+        Route("/api/drafts/{draft_id}", routes_workbench.delete_draft, methods=["DELETE"]),
+        Route("/api/drafts/{draft_id}/commit", routes_workbench.commit_draft, methods=["POST"]),
+        Route("/api/activity", routes_workbench.activity, methods=["GET"]),
+        Route("/api/workbench/tools", routes_workbench.tools_status, methods=["GET"]),
+        Route("/api/workbench/environment", routes_workbench.environment, methods=["GET"]),
+        # what the workbench remembers
+        Route("/api/memory", routes_memory.memory_index, methods=["GET"]),
+        Route("/api/memory", routes_memory.remember, methods=["POST"]),
+        Route("/api/memory/events", routes_memory.memory_events, methods=["GET"]),
+        Route("/api/memory/{memory_id}", routes_memory.edit_memory, methods=["PUT"]),
+        Route("/api/memory/{memory_id}/status", routes_memory.set_memory_status, methods=["POST"]),
         # documents and search
         Route("/api/documents", routes_documents.documents_index, methods=["GET"]),
         Route("/api/documents", routes_documents.upload_document, methods=["POST"]),
         Route("/api/documents/{document_id}/pages/{page:int}", routes_documents.document_page, methods=["GET"]),
         Route("/api/documents/{document_id}/pages/{page:int}/image", routes_documents.document_page_image, methods=["GET"]),
+        Route("/api/documents/{document_id}/versions", routes_documents.document_history, methods=["GET"]),
+        Route("/api/documents/{document_id}/versions", routes_documents.reissue_document, methods=["POST"]),
+        Route("/api/documents/{document_id}/diff", routes_documents.document_diff, methods=["GET"]),
         Route("/api/search", routes_documents.search_documents, methods=["POST"]),
         # artifacts and approvals
         Route("/api/artifacts", routes_artifacts.artifacts_index, methods=["GET"]),
@@ -76,6 +110,8 @@ def routes() -> list[Any]:
         Route("/api/artifacts/{artifact_id}/preview", routes_artifacts.artifact_preview, methods=["GET"]),
         Route("/api/artifacts/{artifact_id}/provenance", routes_artifacts.artifact_provenance, methods=["GET"]),
         Route("/api/artifacts/{artifact_id}/decision", routes_artifacts.decide_artifact, methods=["POST"]),
+        Route("/api/artifacts/{artifact_id}/content", routes_artifacts.artifact_content, methods=["GET"]),
+        Route("/api/artifacts/{artifact_id}/edit", routes_artifacts.edit_artifact, methods=["POST"]),
         # models, routing, sovereignty, observability
         Route("/api/models", routes_system.models_status, methods=["GET"]),
         Route("/api/models/pull", routes_system.pull_models, methods=["POST"]),
@@ -84,6 +120,7 @@ def routes() -> list[Any]:
         Route("/api/sovereignty/probe", routes_system.sovereignty_probe, methods=["POST"]),
         Route("/api/metrics", routes_system.metrics, methods=["GET"]),
         Route("/api/traces", routes_system.traces, methods=["GET"]),
+        Route("/api/observability", routes_observe.observability, methods=["GET"]),
     ]
 
 

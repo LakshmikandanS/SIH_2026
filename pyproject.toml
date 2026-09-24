@@ -164,6 +164,9 @@ module = [
     "test_sandbox_service",
     "test_worker_seed",
     "test_image_contents",
+    "test_workbench",
+    "test_memory_manager",
+    "test_workbench_api",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false

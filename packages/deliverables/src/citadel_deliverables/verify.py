@@ -118,7 +118,7 @@ def _tier_structural(
     for spec in template.sections:
         section = content.sections[spec.key]
         if not section.empty:
-            sample = next((i.text for i in section.items if i.text.strip()), "")
+            sample = next(((i.heading if spec.type == "sections" else i.text) for i in section.items if i.text.strip()), "")
             probe = " ".join(sample.split()[:6]).rstrip(".;:,")  # markers may sit before a final stop
             if probe and probe not in " ".join(rendered_text.split()):
                 issues.append(f"section '{spec.key}' content does not appear in the rendered file")
@@ -153,10 +153,11 @@ def _tier_citation(
         section = content.sections[spec.key]
         if section.empty:
             continue
-        if spec.type in ("list", "table"):
+        if spec.type in ("list", "table", "sections"):
             for index, item in enumerate(section.items, start=1):
                 if (item.text.strip() or item.cells) and not item.citations:
-                    issues.append(f"section '{spec.key}' item {index} carries no citation")
+                    named = f" ('{item.heading}')" if item.heading else ""
+                    issues.append(f"section '{spec.key}' item {index}{named} carries no citation")
         elif not section.citations:
             issues.append(f"section '{spec.key}' carries no citation")
     checked = 0
@@ -189,6 +190,20 @@ def _tier_citation(
     return TierResult(3, "citation", "fail" if issues else "pass", issues, {"citations_checked": checked})
 
 
+def _grounding_units(section: Any) -> list[tuple[int, Any, list[str], str]]:
+    """What each quantitative claim is checked against: an item's own citations -- or,
+    in a report body, each paragraph's own, falling back to its section's when the
+    paragraph cites nothing itself."""
+    units: list[tuple[int, Any, list[str], str]] = []
+    for index, item in enumerate(section.items, start=1):
+        if item.parts:
+            for part in item.parts:
+                units.append((index, item, part.citations or item.citations, part.text))
+        else:
+            units.append((index, item, item.citations, " ".join([item.text, *item.cells.values()])))
+    return units
+
+
 def _tier_grounding(template: TemplateEntry, content: Content, evidence: Mapping[str, Mapping[str, Any]]) -> TierResult:
     tolerance = template.grounding.derived_value_tolerance or 0.0
     ungrounded: list[dict[str, Any]] = []
@@ -196,13 +211,12 @@ def _tier_grounding(template: TemplateEntry, content: Content, evidence: Mapping
     for spec in template.sections:
         if not spec.cited:
             continue
-        for index, item in enumerate(content.sections[spec.key].items, start=1):
-            text = " ".join([item.text, *item.cells.values()])
+        for index, item, cites, text in _grounding_units(content.sections[spec.key]):
             claims = quantities(text)
             if not claims:
                 continue
             source_numbers: list[str] = []
-            for cite in item.citations:
+            for cite in cites:
                 row = evidence.get(cite)
                 if row is not None:
                     source_numbers.extend(quantities(str(row.get("text") or "")))

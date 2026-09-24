@@ -2,7 +2,12 @@
 
 Run once; the output is committed so every machine seeds the same bytes:
 
-    python ops/demo/make_corpus.py
+    python ops/demo/make_corpus.py            # writes only the files that are missing
+    python ops/demo/make_corpus.py --force    # rewrites every file (new bytes: re-seeds!)
+
+Files that already exist are left alone by default: the seed recognises a document by
+the SHA-256 of its bytes, so regenerating a file an installation has already ingested
+would file it a second time.
 
 Every document is invented, marked "SYNTHETIC DEMONSTRATION DATA" on every page, and
 belongs to a fictional plant ("Konkan Process Industries, Unit 7"). The numbers are
@@ -14,6 +19,13 @@ a hand-drawn signature, so OCR and the vision model have real work to do.
 The classifications and ACLs in manifest.yaml are chosen so the three seeded identities
 see visibly different subsets of the same query (ADR-0001 §Q7): the incident report is
 denied to one engineer by classification and to the other by ACL.
+
+The workbench scenario (a report on lathe L-1) adds a machine shop, a procurement desk,
+company policies -- Policy 1 in two revisions a month apart, so "what changed in policy 1
+since last month" has a real, citable answer -- and an offline reference library that
+stands in for web search. Its numbers are consistent too: L-1's 12-month repair cost is
+31.2% of its replacement cost (3.9 / 12.5), which is under Policy 1's threshold last
+month (40%) and over it today (30%).
 
 Needs reportlab, pypdfium2 and Pillow -- tooling for this script only, not runtime
 dependencies of anything under packages/.
@@ -74,7 +86,9 @@ def _draw_page(canvas: Canvas, lines: Sequence[Line], page: int, pages: int, mar
 
 
 def born_digital(path: Path, pages: Sequence[Sequence[Line]], marking: str) -> None:
-    canvas = Canvas(str(path), pagesize=A4)
+    # invariant=1: no creation timestamp or random document id, so the same lines always
+    # produce the same bytes (and the same digest the seed recognises documents by).
+    canvas = Canvas(str(path), pagesize=A4, invariant=1)
     canvas.setTitle(path.stem)
     for index, lines in enumerate(pages, start=1):
         _draw_page(canvas, lines, index, len(pages), marking)
@@ -326,21 +340,234 @@ INCIDENT: list[Line] = [
 ]
 
 
-def main() -> None:
+# -- the workbench scenario: lathe L-1 --------------------------------------------------------
+
+_ALL = "process-engineering, instrumentation, quality-assurance"
+
+POLICY1_REV1: list[Line] = [
+    ("h1", "POLICY 1 - CAPITAL EQUIPMENT REPLACEMENT AND PURCHASE"),
+    ("t", "Document: POL-01     Revision: 1     Effective: 01 Aug 2026     Owner: Plant Head"),
+    ("t", "Applies to: production machine tools and workshop equipment at Unit 7."),
+    ("gap", ""),
+    ("h2", "1. REPLACEMENT CRITERIA"),
+    ("t", "1.1 A machine qualifies for replacement when it is more than 20 years old."),
+    ("t", "1.2 A machine also qualifies when its repair cost over 12 months exceeds 40% of replacement cost."),
+    ("gap", ""),
+    ("h2", "2. QUOTATIONS"),
+    ("t", "2.1 One quotation is sufficient for purchases up to INR 5 lakh."),
+    ("t", "2.2 Two quotations are required for purchases above INR 5 lakh."),
+    ("gap", ""),
+    ("h2", "3. APPROVAL"),
+    ("t", "3.1 Purchases above INR 15 lakh require the approval of the Plant Head."),
+    ("gap", ""),
+    ("h2", "4. VENDORS"),
+    ("t", "4.1 Vendors shall provide a warranty of at least one year."),
+]
+
+POLICY1_REV2: list[Line] = [
+    ("h1", "POLICY 1 - CAPITAL EQUIPMENT REPLACEMENT AND PURCHASE"),
+    ("t", "Document: POL-01     Revision: 2     Effective: 01 Sep 2026     Owner: Plant Head"),
+    ("t", "Applies to: production machine tools and workshop equipment at Unit 7."),
+    ("gap", ""),
+    ("h2", "1. REPLACEMENT CRITERIA"),
+    ("t", "1.1 A machine qualifies for replacement when it is more than 20 years old."),
+    ("t", "1.2 A machine also qualifies when its repair cost over 12 months exceeds 30% of replacement cost."),
+    ("t", "1.3 Replacement machines shall have motors of efficiency class IE3 or better."),
+    ("gap", ""),
+    ("h2", "2. QUOTATIONS"),
+    ("t", "2.1 One quotation is sufficient for purchases up to INR 5 lakh."),
+    ("t", "2.2 Two quotations are required for purchases above INR 5 lakh and up to INR 10 lakh."),
+    ("t", "2.3 Three quotations are required for purchases above INR 10 lakh."),
+    ("gap", ""),
+    ("h2", "3. APPROVAL"),
+    ("t", "3.1 Purchases above INR 10 lakh require the approval of the Plant Head."),
+    ("gap", ""),
+    ("h2", "4. VENDORS"),
+    ("t", "4.1 Vendors shall provide a warranty of at least one year."),
+    ("t", "4.2 Vendors shall have a service centre within 200 km of the plant."),
+]
+
+POLICY2: list[Line] = [
+    ("h1", "POLICY 2 - MACHINE GUARDING AND WORKSHOP SAFETY"),
+    ("t", "Document: POL-02     Revision: 3     Effective: 15 Jan 2026     Owner: HSE Manager"),
+    ("gap", ""),
+    ("h2", "1. LATHES"),
+    ("t", "1.1 Every lathe chuck shall have a guard interlocked with the spindle drive."),
+    ("t", "1.2 A lathe without an interlocked chuck guard shall not be operated after 31 Mar 2026."),
+    ("t", "1.3 Emergency stop buttons shall be tested at the start of every shift."),
+    ("gap", ""),
+    ("h2", "2. GENERAL"),
+    ("t", "2.1 Operators shall be trained and authorised for each machine they use."),
+    ("t", "2.2 Gloves near rotating parts and unguarded chip removal are prohibited."),
+]
+
+POLICY3: list[Line] = [
+    ("h1", "POLICY 3 - PREVENTIVE MAINTENANCE OF MACHINE TOOLS"),
+    ("t", "Document: POL-03     Revision: 2     Effective: 01 Apr 2026     Owner: Maintenance Manager"),
+    ("gap", ""),
+    ("t", "1. Spindle runout shall be checked every quarter; the acceptance limit is 0.02 mm."),
+    ("t", "2. Bed wear above 0.10 mm requires regrinding of the bed or replacement of the machine."),
+    ("t", "3. Slideway lubrication shall be checked daily and logged."),
+    ("t", "4. A machine with more than 4 breakdowns in 12 months shall be reviewed for replacement."),
+]
+
+LATHE_L1: list[Line] = [
+    ("h1", "MACHINE SHOP SECTOR 1 - LATHE L-1 CONDITION REPORT"),
+    ("t", "Report No: MS1-2026-031     Date: 18 Aug 2026     Prepared by: V. Patil (shop engineer)"),
+    ("t", "Machine: L-1 conventional centre lathe, Sahyadri SMT-450, commissioned 2009."),
+    ("t", "Swing over bed 450 mm, 1500 mm between centres, spindle motor 7.5 kW (efficiency class IE1)."),
+    ("gap", ""),
+    ("h2", "1. CONDITION"),
+    ("t", "Spindle runout is 0.045 mm at the chuck face against an acceptance limit of 0.02 mm."),
+    ("t", "Bed wear is 0.12 mm near the headstock; the tailstock is misaligned by 0.05 mm."),
+    ("t", "The chuck guard is fitted but is not interlocked with the spindle drive."),
+    ("t", "Headstock bearing noise was reported on 3 shifts in August."),
+    ("gap", ""),
+    ("h2", "2. RELIABILITY AND COST, LAST 12 MONTHS"),
+    ("t", "Breakdowns: 6.  Downtime: 142 hours.  Repair cost: INR 3.9 lakh."),
+    ("t", "Like-for-like replacement cost (conventional lathe of the same capacity): INR 12.5 lakh."),
+    ("gap", ""),
+    ("h2", "3. UTILISATION"),
+    ("t", "Utilisation was 78% of available hours over two shifts; 41 jobs were waiting for L-1."),
+    ("gap", ""),
+    ("h2", "4. SHOP ENGINEER'S NOTE"),
+    ("t", "Accuracy is no longer adequate for pump shaft sleeves, which need 0.02 mm."),
+    ("t", "Recommend replacement with a CNC turning centre; requisition PR-2026-0418 raised."),
+]
+
+LATHE_LOG: list[Line] = [
+    ("h1", "MACHINE SHOP SECTOR 2 - LATHE PRODUCTION LOG, AUGUST 2026"),
+    ("t", "Prepared by: S. Kale (production supervisor)     Period: 01 to 31 Aug 2026"),
+    ("gap", ""),
+    ("m", "MACHINE  TYPE                BUILT  UTILISATION  SCRAP  FLANGE BLANK"),
+    ("m", "L-2      CNC turning centre  2019   64%          1.2%   6.5 min"),
+    ("m", "L-3      conventional lathe  2012   81%          4.8%   17 min"),
+    ("gap", ""),
+    ("t", "The scrap target for turned parts is 2.0%; L-3 exceeded it in every week of August."),
+    ("t", "Turning backlog across the shop: 320 jobs, of which 118 are pump spares."),
+    ("t", "Overtime on lathes in August: 96 hours. L-2 has about 30 hours a week of spare capacity."),
+    ("t", "Sleeve jobs moved from L-1 to L-3 in August raised L-3 scrap on those jobs."),
+]
+
+REQUISITION: list[Line] = [
+    ("h1", "PURCHASE REQUISITION PR-2026-0418"),
+    ("t", "Date raised: 04 Sep 2026     Raised by: machine shop sector 1     Budget: CAPEX-26-MS"),
+    ("t", "Item: one 2-axis CNC turning centre, to replace lathe L-1."),
+    ("gap", ""),
+    ("m", "VENDOR                MODEL   QUOTED PRICE    DELIVERY  SERVICE CENTRE"),
+    ("m", "Deccan Machine Tools  DT-250  INR 18.6 lakh   10 weeks  Pune, 160 km"),
+    ("gap", ""),
+    ("t", "Quotations attached: 1 (single source)."),
+    ("t", "Justification: repair cost over 12 months is 31% of replacement cost (Policy 1, clause 1.2)."),
+    ("t", "Approval route: Plant Head (value above INR 10 lakh)."),
+    ("t", "Status: awaiting procurement review."),
+]
+
+QUOTATIONS: list[Line] = [
+    ("h1", "VENDOR QUOTATION COMPARISON - CNC TURNING CENTRES"),
+    ("t", "Prepared by: procurement cell     Date: 11 Sep 2026     Reference: PR-2026-0418"),
+    ("gap", ""),
+    ("m", "VENDOR                MODEL   PRICE      DELIVERY  SERVICE CENTRE     MOTOR"),
+    ("m", "Deccan Machine Tools  DT-250  18.6 lakh  10 weeks  Pune, 160 km       IE3"),
+    ("m", "Konkan Tooling Co.    KT-2A   16.9 lakh  14 weeks  Ratnagiri, 60 km   IE3"),
+    ("m", "Western Precision     WP-T20  21.4 lakh  8 weeks   Ahmedabad, 540 km  IE4"),
+    ("gap", ""),
+    ("t", "WP-T20 does not meet the 200 km service-centre requirement of Policy 1 Revision 2."),
+    ("t", "KT-2A is the lowest compliant quotation, but its 400 mm swing is below L-1's 450 mm."),
+    ("t", "Negotiated prices are commercially confidential."),
+]
+
+REF_DIGEST: list[Line] = [
+    ("h1", "TECHNOLOGY DIGEST - CNC TURNING CENTRES AND CONVENTIONAL LATHES"),
+    ("t", "Reference library item REF-01. Imported 02 Sep 2026 after review. Public literature summary."),
+    ("gap", ""),
+    ("h2", "1. PRODUCTIVITY"),
+    ("t", "CNC turning centres typically cut cycle time by 50 to 65% on repeat batch work."),
+    ("t", "Scrap on turned parts typically falls below 2% with CNC and in-process gauging."),
+    ("gap", ""),
+    ("h2", "2. RETROFIT OR REPLACE"),
+    ("t", "A CNC retrofit of a conventional lathe costs 35 to 50% of a new turning centre."),
+    ("t", "A retrofit does not correct bed wear above 0.10 mm; such machines should be replaced."),
+    ("gap", ""),
+    ("h2", "3. ENERGY AND PEOPLE"),
+    ("t", "IE3 spindle motors use 8 to 12% less energy than IE1 motors at typical duty."),
+    ("t", "Conventional machinists typically need 3 to 4 weeks of training on a CNC turning centre."),
+]
+
+REF_CATALOGUE: list[Line] = [
+    ("h1", "VENDOR CATALOGUE EXTRACT - 2-AXIS CNC TURNING CENTRES"),
+    ("t", "Reference library item REF-02. Imported 02 Sep 2026 after review. List prices only."),
+    ("gap", ""),
+    ("m", "MODEL   MAKER                  SWING   SPINDLE MOTOR  LIST PRICE"),
+    ("m", "DT-250  Deccan Machine Tools   450 mm  11 kW IE3      INR 17 to 19 lakh"),
+    ("m", "KT-2A   Konkan Tooling Co.     400 mm  7.5 kW IE3     INR 15 to 17 lakh"),
+    ("m", "WP-T20  Western Precision      500 mm  15 kW IE4      INR 20 to 23 lakh"),
+    ("gap", ""),
+    ("t", "All three models accept ISO G-code programs and offer an optional bar feeder."),
+    ("t", "Swing is the largest diameter a machine can turn over its bed."),
+]
+
+#: (file name, pages, marking) for every born-digital document in the lathe scenario.
+WORKBENCH_DOCUMENTS: list[tuple[str, list[list[Line]], str]] = [
+    ("POL-01_capital_equipment_policy_rev1.pdf", [POLICY1_REV1], "INTERNAL"),
+    ("POL-01_capital_equipment_policy_rev2.pdf", [POLICY1_REV2], "INTERNAL"),
+    ("POL-02_machine_guarding_policy.pdf", [POLICY2], "INTERNAL"),
+    ("POL-03_preventive_maintenance_policy.pdf", [POLICY3], "INTERNAL"),
+    ("MS1-2026-031_lathe_L-1_condition_report.pdf", [LATHE_L1], "INTERNAL"),
+    ("MS2_lathe_production_log_2026-08.pdf", [LATHE_LOG], "INTERNAL"),
+    ("PR-2026-0418_lathe_purchase_requisition.pdf", [REQUISITION], "INTERNAL"),
+    ("PRC_cnc_turning_centre_quotations.pdf", [QUOTATIONS], "CONFIDENTIAL"),
+    ("REF-01_cnc_turning_technology_digest.pdf", [REF_DIGEST], "PUBLIC"),
+    ("REF-02_cnc_turning_centre_catalogue.pdf", [REF_CATALOGUE], "PUBLIC"),
+]
+
+
+def _check_widths(lines: Sequence[Line]) -> None:
+    """Keep every line inside the page: a clipped line is a clipped fact."""
+    for style, text in lines:
+        limit = {"m": 84, "h1": 66, "h2": 80}.get(style, 100)
+        if len(text) > limit:
+            raise ValueError(f"line too long for the page ({len(text)} > {limit}): {text}")
+
+def main(argv: Sequence[str] = ()) -> None:
+    force = "--force" in argv
     OUT.mkdir(parents=True, exist_ok=True)
-    scanned(OUT / "IR-2026-0147_E-101_inspection_report.pdf", [E101_P1, E101_P2], "INTERNAL",
-            stamp=["QA INSPECTED", "14 AUG 2026", "INSP. CELL"], stamp_at=(0.70, 0.47),
-            signature_at=(0.47, 0.378), seed=11)
-    born_digital(OUT / "UT-2026-0311_V-204_thickness_survey.pdf", [V204], "CONFIDENTIAL")
-    born_digital(OUT / "P-310_maintenance_history.pdf", [P310], "INTERNAL")
-    born_digital(OUT / "CS-12_corrosion_allowance_standard.pdf", [CS12], "PUBLIC")
-    scanned(OUT / "PT-4471_calibration_record.pdf", [PT4471_P1], "CONFIDENTIAL",
-            stamp=["CALIBRATED", "21 AUG 2026", "I&C LAB"], stamp_at=(0.74, 0.42),
-            signature_at=(0.36, 0.348), seed=23)
-    born_digital(OUT / "INC-2026-0092_E-101_flange_leak.pdf", [INCIDENT], "CONFIDENTIAL")
-    nameplate(OUT / "V-204_nameplate_photo.png")
-    print(f"corpus written to {OUT}")
+    written: list[str] = []
+
+    def wanted(name: str) -> Path | None:
+        path = OUT / name
+        if path.exists() and not force:
+            return None
+        written.append(name)
+        return path
+
+    if (path := wanted("IR-2026-0147_E-101_inspection_report.pdf")) is not None:
+        scanned(path, [E101_P1, E101_P2], "INTERNAL",
+                stamp=["QA INSPECTED", "14 AUG 2026", "INSP. CELL"], stamp_at=(0.70, 0.47),
+                signature_at=(0.47, 0.378), seed=11)
+    if (path := wanted("UT-2026-0311_V-204_thickness_survey.pdf")) is not None:
+        born_digital(path, [V204], "CONFIDENTIAL")
+    if (path := wanted("P-310_maintenance_history.pdf")) is not None:
+        born_digital(path, [P310], "INTERNAL")
+    if (path := wanted("CS-12_corrosion_allowance_standard.pdf")) is not None:
+        born_digital(path, [CS12], "PUBLIC")
+    if (path := wanted("PT-4471_calibration_record.pdf")) is not None:
+        scanned(path, [PT4471_P1], "CONFIDENTIAL",
+                stamp=["CALIBRATED", "21 AUG 2026", "I&C LAB"], stamp_at=(0.74, 0.42),
+                signature_at=(0.36, 0.348), seed=23)
+    if (path := wanted("INC-2026-0092_E-101_flange_leak.pdf")) is not None:
+        born_digital(path, [INCIDENT], "CONFIDENTIAL")
+    if (path := wanted("V-204_nameplate_photo.png")) is not None:
+        nameplate(path)
+    for name, pages, marking in WORKBENCH_DOCUMENTS:
+        for page in pages:
+            _check_widths(page)
+        if (path := wanted(name)) is not None:
+            born_digital(path, pages, marking)
+    print(f"corpus in {OUT}: wrote {len(written)} file(s)" + (f": {', '.join(written)}" if written else ""))
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(sys.argv[1:])

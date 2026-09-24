@@ -150,6 +150,7 @@ class Chokepoint:
                 "notes": tool.notes,
                 "requires_receipt": tool.requires_receipt,
                 "classification_ceiling": tool.classification_ceiling,
+                "options": dict(tool.options or {}),
             })
         return offered
 

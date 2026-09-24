@@ -25,7 +25,11 @@ ALLOWED: dict[str, frozenset[str]] = {
     "memory": frozenset({"contracts", "platform", "gateway"}),
     "deliverables": frozenset({"contracts", "platform"}),
     "sovereignty": frozenset({"contracts", "platform"}),
-    "tools": frozenset({"contracts", "platform", "gateway", "knowledge", "deliverables"}),
+    # memory joined tools with the memory manager (docs/adr/0009): an agent recalls what the
+    # workbench remembers through the memory.recall tool, i.e. through the policy
+    # chokepoint -- the same reason retrieval is reached through docs.* and never imported
+    # by the runtime.
+    "tools": frozenset({"contracts", "platform", "gateway", "knowledge", "deliverables", "memory"}),
     "runtime": frozenset({"contracts", "platform", "gateway", "tools", "memory"}),
 }
 

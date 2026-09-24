@@ -332,3 +332,87 @@ def test_the_calculation_sheet_fills_by_column_heading_and_carries_its_markings(
     assert [sheet.cell(row=22, column=c).value for c in range(1, 5)] == ["Remaining life", "(9.2 - 8.4) / 0.25", 3.2, "[2]"]
     assert sheet["E1"].value == "INTERNAL" and "INTERNAL" in (sheet.oddFooter.center.text or "")
     assert sheet.cell(row=48, column=2).value.startswith("Computation C1")
+
+
+# -- a report shaped by its request ---------------------------------------------------------
+
+GOOD_REPORT: dict[str, Any] = {
+    "title": "Heat exchanger E-101 - shell condition",
+    "summary": "E-101's thinnest reading leaves 3.2 years of remaining life [E1].",
+    "body": [
+        {"heading": "Shell condition",
+         "text": "CML-3 measured 9.2 mm against a t-min of 8.4 mm [E1].\nThe shell is carbon steel, nominal 12.0 mm [E2]."},
+        {"heading": "Corrosion and remaining life",
+         "text": "- The corrosion rate is 0.25 mm/year [E1]\n- Remaining life is 3.2 years [E1]"},
+    ],
+    "recommendations": ["Re-inspect CML-3 within 12 months."],
+    "open_questions": ["Is a shell repair planned before 2028?"],
+}
+
+
+def test_a_report_body_is_normalised_into_headed_sections_of_cited_paragraphs():
+    template = _templates()["report"]
+    content = normalise(template, GOOD_REPORT)
+    assert not content.issues
+    body = content.sections["body"]
+    assert [i.heading for i in body.items] == ["Shell condition", "Corrosion and remaining life"]
+    assert [p.citations for p in body.items[0].parts] == [["E1"], ["E2"]]
+    assert body.items[1].parts[0].text == "- The corrosion rate is 0.25 mm/year"
+    loose = normalise(template, {**GOOD_REPORT, "body": [{"text": "no heading [E1]"}, {"heading": "Empty"}, "just text"]})
+    assert any("needs a heading" in i for i in loose.issues)
+    assert any("'Empty' has no text" in i for i in loose.issues)
+    assert any("expected an object with 'heading' and 'text'" in i for i in loose.issues)
+
+
+@requires_pgvector
+@pytest.mark.integration
+def test_a_report_is_rendered_with_its_own_headings_and_references_where_they_belong(world: dict[str, Any]):
+    db, data_dir = world["db"], world["data_dir"]
+    template = _templates()["report"]
+    task = _task(db)
+    evidence = _evidence(db, task, world["document_id"])
+    generated = generate(db, data_dir, REGISTRY_DIR, template, GOOD_REPORT, task=task, author=ENGINEER, evidence=evidence)
+    tiers = {t.name: t.status for t in generated.verification.tiers}
+    assert tiers == {"structural": "pass", "schema": "pass", "citation": "pass", "grounding": "pass"}, generated.verification.to_dict()
+    artifact, data = read_bytes(db, data_dir, generated.artifact_id)
+    assert generated.status == "VERIFIED" and not artifact["requires_approval"]  # the author owns a report
+    text = rendered_text("docx", data)
+    assert "Shell condition" in text and "Corrosion and remaining life" in text
+    assert "CML-3 measured 9.2 mm against a t-min of 8.4 mm [1]." in text
+    assert "The shell is carbon steel, nominal 12.0 mm [2]." in text
+    assert "•  The corrosion rate is 0.25 mm/year [1]" in text
+    assert "Re-inspect CML-3 within 12 months." in text and "{{" not in text
+    assert "Recommendations" in text and "Open questions" in text
+    assert "<h3>Shell condition</h3>" in to_html("docx", data)
+    assert artifact["title"].startswith("Report: Heat exchanger E-101")
+    # Asked for two things, the report is those two things: optional sections left empty
+    # leave the document with their headings, rather than reading "Not applicable."
+    only_body = {k: v for k, v in GOOD_REPORT.items() if k not in ("recommendations", "open_questions")}
+    lean = generate(db, data_dir, REGISTRY_DIR, template, {**only_body, "title": "Report on E-101"}, task=task,
+                    author=ENGINEER, evidence=evidence)
+    assert lean.status == "VERIFIED", lean.verification.to_dict()
+    lean_artifact, lean_data = read_bytes(db, data_dir, lean.artifact_id)
+    lean_text = rendered_text("docx", lean_data)
+    assert "Recommendations" not in lean_text and "Open questions" not in lean_text and "Not applicable" not in lean_text
+    assert "Shell condition" in lean_text and "Sources" in lean_text and "Revision history" in lean_text
+    assert lean_artifact["title"] == "Report on E-101"  # a subject that names its kind is not prefixed again
+
+
+@requires_pgvector
+@pytest.mark.integration
+def test_a_report_section_must_cite_and_each_paragraph_is_grounded_on_its_own(world: dict[str, Any]):
+    db, data_dir = world["db"], world["data_dir"]
+    template = _templates()["report"]
+    task = _task(db)
+    evidence = _evidence(db, task, world["document_id"])
+    uncited = {**GOOD_REPORT, "body": [*GOOD_REPORT["body"], {"heading": "Opinion", "text": "It looks fine."}]}
+    failed = generate(db, data_dir, REGISTRY_DIR, template, uncited, task=task, author=ENGINEER, evidence=evidence)
+    assert failed.status == "TEMP"
+    citation = next(t for t in failed.verification.tiers if t.name == "citation")
+    assert citation.status == "fail" and any("('Opinion') carries no citation" in i for i in citation.issues)
+    # 14 mm is cited to E2, which says 12.0 mm: flagged -- even though E1 elsewhere in the
+    # same section would not have saved it, each paragraph answers for its own numbers.
+    wrong = {**GOOD_REPORT, "body": [{"heading": "Shell", "text": "CML-3 is 9.2 mm [E1].\nThe shell is 14 mm thick [E2]."}]}
+    flagged = generate(db, data_dir, REGISTRY_DIR, template, wrong, task=task, author=ENGINEER, evidence=evidence)
+    assert flagged.status == "VERIFIED"
+    assert [c["number"] for c in flagged.verification.flagged_claims] == ["14"]

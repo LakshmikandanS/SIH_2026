@@ -53,7 +53,7 @@ def _table_names(env: dict[str, str]) -> set[str]:
 
 def test_discovers_the_real_migrations_in_version_order():
     migrations = discover_migrations(REAL_MIGRATIONS_DIR)
-    assert [m.version for m in migrations] == [f"{n:04d}" for n in range(1, 10)]
+    assert [m.version for m in migrations] == [f"{n:04d}" for n in range(1, 11)]
     assert migrations[0].name == "audit_chain"
 
 

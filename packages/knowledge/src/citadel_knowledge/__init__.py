@@ -10,7 +10,9 @@ from citadel_knowledge.retrieval import (
     SearchHit,
     SearchResult,
     SearchScope,
+    diff_versions,
     document_facts,
+    document_versions,
     evidence,
     is_uuid,
     read_page,
@@ -21,7 +23,14 @@ from citadel_knowledge.retrieval import (
     task_evidence,
     visible_documents,
 )
-from citadel_knowledge.upload import UploadMetadata, UploadRejected, register_upload, validate_metadata
+from citadel_knowledge.upload import (
+    UploadMetadata,
+    UploadRejected,
+    normalise_folder,
+    register_new_version,
+    register_upload,
+    validate_metadata,
+)
 
 __all__ = [
     "IngestContext",
@@ -34,7 +43,9 @@ __all__ = [
     "SearchHit",
     "SearchResult",
     "SearchScope",
+    "diff_versions",
     "document_facts",
+    "document_versions",
     "evidence",
     "is_uuid",
     "read_page",
@@ -46,6 +57,8 @@ __all__ = [
     "visible_documents",
     "UploadMetadata",
     "UploadRejected",
+    "normalise_folder",
+    "register_new_version",
     "register_upload",
     "validate_metadata",
 ]

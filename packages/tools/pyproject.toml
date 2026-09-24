@@ -12,6 +12,7 @@ dependencies = [
     "citadel-gateway",
     "citadel-knowledge",
     "citadel-deliverables",
+    "citadel-memory",
     "jsonschema>=4",
     "openpyxl>=3.1",
     "pillow>=10",
@@ -32,3 +33,4 @@ citadel-platform = { workspace = true }
 citadel-gateway = { workspace = true }
 citadel-knowledge = { workspace = true }
 citadel-deliverables = { workspace = true }
+citadel-memory = { workspace = true }

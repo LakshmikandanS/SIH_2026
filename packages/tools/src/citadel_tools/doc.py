@@ -39,11 +39,13 @@ def template_guide(ctx: ToolContext) -> list[dict[str, Any]]:
     for template in ctx.registry.templates:
         guide.append({
             "template_id": template.id,
+            "description": template.description or "",
             "format": template.format,
             "approval_block": template.approval_block,
             "sections": [
                 {"key": s.key, "type": s.type, "required": s.required, "cited": s.cited,
-                 **({"min_items": s.min_items} if s.min_items else {})}
+                 **({"min_items": s.min_items} if s.min_items else {}),
+                 **({"left_out_when_empty": True} if s.omit_when_empty else {})}
                 for s in template.sections
             ],
         })

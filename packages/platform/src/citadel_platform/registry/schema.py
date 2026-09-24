@@ -178,6 +178,9 @@ class ToolEntry(_Strict):
     requires_receipt: bool
     schema_: Dict[str, Any] = Field(alias="schema")
     description: str = ""  # one line a planner reads; phrasing for a model, not policy
+    #: Settings the tool's own plugin reads -- which folder a search is confined to,
+    #: say. Data, never policy: nothing here can grant or deny anything.
+    options: Dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -321,9 +324,15 @@ class EventDefinition(_Strict):
 class TemplateSection(_Strict):
     key: str
     required: bool
-    type: Literal["text", "rich_text", "list", "table", "date", "value"]
+    #: 'sections' is a list of {heading, text} whose headings the writer chooses -- a
+    #: report shaped by what the person asked for rather than by a fixed outline.
+    type: Literal["text", "rich_text", "list", "table", "date", "value", "sections"]
     min_items: Optional[int] = None
     cited: bool = False
+    #: An optional section left empty is taken out of the document -- with the heading
+    #: directly before its placeholder -- instead of printed as "Not applicable.". For a
+    #: report shaped by its request: what was not asked for is not there.
+    omit_when_empty: bool = False
 
 
 class Grounding(_Strict):
@@ -333,6 +342,8 @@ class Grounding(_Strict):
 
 class TemplateEntry(_Strict):
     id: str
+    #: One line for the planner and for people choosing a template: what it is for.
+    description: Optional[str] = None
     format: Literal["docx", "xlsx"]
     file: str
     classification_markings: bool

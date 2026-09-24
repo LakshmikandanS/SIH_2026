@@ -146,7 +146,8 @@ def _fields(
     version: int,
 ) -> dict[str, str]:
     subject = next(
-        (i.text for key in ("subject", "equipment_tag") if key in content.sections for i in content.sections[key].items),
+        (i.text for key in ("subject", "title", "equipment_tag") if key in content.sections
+         for i in content.sections[key].items),
         "",
     )
     short = task.task_id.split("-")[0].upper()
@@ -263,9 +264,11 @@ def store_artifact(
 
 def _prior_revisions(db: Database, task_id: str, template_id: str) -> list[list[str]]:
     rows = db.query(
-        "SELECT a.version, a.created_at, a.created_by, a.provenance -> 'render_inputs' ->> 'revision_note' AS note, "
+        "SELECT a.version, a.created_at, coalesce(u.display_name, a.created_by) AS created_by, "
+        "a.provenance -> 'render_inputs' ->> 'revision_note' AS note, "
         "(SELECT p.reason FROM approvals p WHERE p.artifact_id = a.id AND p.decision = 'rejected' LIMIT 1) AS rejection "
-        "FROM artifacts a WHERE a.task_id = %(t)s::uuid AND a.template_id = %(k)s ORDER BY a.version",
+        "FROM artifacts a LEFT JOIN users u ON u.external_identity = a.created_by "
+        "WHERE a.task_id = %(t)s::uuid AND a.template_id = %(k)s ORDER BY a.version",
         {"t": task_id, "k": template_id},
     )
     history: list[list[str]] = []
@@ -308,12 +311,14 @@ def generate(
     verification = _verify(registry_dir, template, content, data, task, evidence, db)
     filename = f"{template.id}-{task.task_id.split('-')[0]}-v{version}.{template.format}"
     digest = hashlib.sha256(data).hexdigest()
+    label, subject = template.id.replace("-", " ").capitalize(), fields["subject_line"] or task.goal[:80]
     artifact_id, _ = store_artifact(
         db,
         data_dir,
         task_id=task.task_id,
         kind=template.format,
-        title=f"{template.id.replace('-', ' ').capitalize()}: {fields['subject_line'] or task.goal[:80]}",
+        # "Report: Report on lathe L-1" reads twice; a subject that already names the kind stands alone.
+        title=subject if subject.lower().startswith(label.lower()) else f"{label}: {subject}",
         filename=filename,
         data=data,
         classification=task.classification,
@@ -404,6 +409,12 @@ def decide(
         raise ArtifactError("the person who asked for a deliverable cannot approve it")
     if db.scalar("SELECT count(*) FROM approvals WHERE artifact_id = %(a)s::uuid", {"a": artifact_id}):
         raise ArtifactError("this artifact already has a decision")
+    newer = db.scalar(
+        "SELECT max(version) FROM artifacts WHERE task_id = %(t)s::uuid AND template_id = %(k)s AND version > %(v)s",
+        {"t": artifact["task_id"], "k": artifact["template_id"], "v": int(artifact["version"])},
+    )
+    if newer:
+        raise ArtifactError(f"a newer version (v{newer}) of this deliverable exists; decide on that one")
     now = datetime.now(timezone.utc)
     approval_row = (
         "INSERT INTO approvals (artifact_id, approver_id, decision, reason, decided_at) VALUES "

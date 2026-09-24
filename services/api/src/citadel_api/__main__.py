@@ -14,11 +14,16 @@ import os
 
 import uvicorn
 
+from citadel_platform import heartbeat
+
 from citadel_api.app import create_app
 
 
 def main() -> None:
     app = create_app()
+    state = app.state.citadel
+    # Container health reads this row; the sandbox has no database, so the API reports it.
+    heartbeat.start(state.db, "api", detail=lambda: {"sandbox": "container" if state.sandbox else "process"})
     host = os.environ.get("CITADEL_API_HOST", "127.0.0.1")
     port = int(os.environ.get("CITADEL_API_PORT", "8000"))
     uvicorn.run(app, host=host, port=port)

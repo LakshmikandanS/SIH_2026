@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Iterator
 
 import pytest
+import yaml
 
 from citadel_contracts.domain import User
 from citadel_gateway import AdmissionGate
@@ -119,7 +120,9 @@ def corpus_db(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[Databa
 def test_every_corpus_document_is_ready_with_an_honest_report(corpus_db: tuple[Database, Any]):
     db, _gateway = corpus_db
     rows = db.query("SELECT title, status, page_count, ingest_report FROM documents ORDER BY title")
-    assert len(rows) == 7 and all(r["status"] == "ready" for r in rows)
+    manifest = yaml.safe_load((CORPUS / "manifest.yaml").read_text(encoding="utf-8"))["documents"]
+    first_issues = [e for e in manifest if not e.get("version_of")]  # a re-issue waits for its first issue
+    assert len(rows) == len(first_issues) and all(r["status"] == "ready" for r in rows)
     scanned = next(r for r in rows if "IR-2026-0147" in r["title"])
     report = scanned["ingest_report"]
     assert scanned["page_count"] == 2
