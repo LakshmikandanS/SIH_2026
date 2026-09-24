@@ -294,11 +294,19 @@ accepts the ruleset in a container namespace. The panel says so either way.
 **Two substitutions from the build sandbox still stand**: Starlette + uvicorn for FastAPI,
 and hand-written HTML/CSS/JS for Vite + React (`services/AGENTS.md`, `web/AGENTS.md`).
 
-**`scripts/check.sh` is green**: 396 tests pass and 1 is skipped (the psycopg audit
-writer, which has no driver in the build sandbox). `mypy --strict` is clean across 157
-files, and so is ruff. The workbench has also been walked in a browser (Playwright) against
-`scripts/run.sh --fake-models`: a report from a prompt, a hand edit, a revision by the
-agents, an uncited number flagged, `/ask`, and every panel, with no page errors.
+**`scripts/check.sh` is green** on a fresh clone of the committed repository: 398 tests
+pass and 1 is skipped (the psycopg audit writer, which has no driver in the build
+sandbox). `mypy --strict` is clean across 158 files, and so is ruff. The clone's
+`scripts/run.sh --fake-models` has also been driven in a browser (Playwright):
+
+- **The workbench**: a report from a prompt, a hand edit, a revision by the agents, an
+  uncited number flagged, the unsaved-edit guards, `/ask`, and every panel.
+- **The five targets from the Task log**: the approval note released by the approver,
+  sandboxed code, the vision read, the access-controlled question, routing and the
+  sovereignty panel.
+- **The audit chain** verifies.
+
+No page errors.
 
 **Not done, and where to resume:**
 
