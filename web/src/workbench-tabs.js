@@ -501,6 +501,7 @@
         const detail = await api(`/api/tasks/${taskId}`);
         const reports = (detail.artifacts || []).filter((a) => a.template_id);
         if (!reports.length) {
+          tab.lastStatus = detail.task.status;
           pane.innerHTML = `<div class="ide-page"><div class="notice info">No deliverable yet — the agents are still working.
             ${ACTIVE.has(detail.task.status) ? `<span class="spin"></span>` : ""}</div></div>`;
           return null;
@@ -508,6 +509,9 @@
         const target = artifactId || reports[reports.length - 1].id;
         const data = await api(`/api/artifacts/${target}/content`);
         const artifact = data.artifact;
+        // What this view shows is what the watch below compares against: a revision that
+        // finishes between two ticks must still be noticed.
+        tab.lastStatus = detail.task.status;
         tab.name = `${(detail.task.title || data.content.title || "report").slice(0, 36)}`;
         ide.retitle(tab);
         ide.setTask(taskId);
@@ -654,8 +658,7 @@
         }
       });
       tab.cleanups.push(() => { tab.dirty = false; });
-      const first = await draw();
-      tab.lastStatus = first ? first.task.status : null;
+      await draw();
       // While the agents work on it (a revision, say), watch the task; redraw when it
       // starts or stops, so the editor never shows a stale version as current.
       every(tab, 4000, async () => {

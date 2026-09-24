@@ -99,7 +99,7 @@
       body = JSON.stringify(body);
     }
     const response = await fetch(path, { method: options.method || "GET", headers, body, signal: options.signal });
-    if (response.status === 401 && token === session.token) {
+    if (response.status === 401 && token && token === session.token) {
       session.clear();
       showLogin("Your session has ended. Sign in again.");
       throw new ApiError("signed out", 401);
@@ -192,6 +192,9 @@
   async function showLogin(message) {
     stopStream();
     clearTimers();
+    // The view's own cleanups too (the workbench polls on its own timers): nothing keeps
+    // asking the API on behalf of a session that has ended.
+    app.cleanups.splice(0).forEach((fn) => { try { fn(); } catch (_) { /* best effort */ } });
     $("#shell").hidden = true;
     $("#egress-pill").hidden = true;
     $("#identity-slot").innerHTML = "";
@@ -270,7 +273,15 @@
   }
 
   function startGlobalPollers() {
+    // Once per page: boot() runs again at every sign-in, and a signed-out page must not
+    // poll (a 401 there would put the sign-in screen up again every few seconds).
+    if (app.pollersStarted) {
+      app.refreshApprovals();
+      return;
+    }
+    app.pollersStarted = true;
     const egress = async () => {
+      if (!session.token) return;
       try {
         const panel = await api("/api/sovereignty");
         const counts = panel.status.counts;
@@ -284,15 +295,19 @@
       } catch (_) { /* the pill simply stays as it was */ }
     };
     const approvals = async () => {
-      if (!session.has("approver") && !session.has("admin")) return;
+      const badge = $("#approvals-count");
+      if (!session.token || (!session.has("approver") && !session.has("admin"))) {
+        badge.hidden = true;
+        return;
+      }
       try {
         const data = await api("/api/artifacts?awaiting=1");
-        const badge = $("#approvals-count");
         const n = (data.artifacts || []).length;
         badge.hidden = n === 0;
         badge.textContent = String(n);
       } catch (_) { /* ignore */ }
     };
+    app.refreshApprovals = approvals;
     egress();
     approvals();
     setInterval(egress, 15000);
@@ -1156,7 +1171,7 @@
       <div class="card">
         <div class="card-head"><h2>${esc(a.title || a.filename)}</h2>${statusPill(a.status)} ${levelPill(a.classification)}</div>
         <dl class="kv">
-          <dt>Task goal</dt><dd>${esc(a.goal)} <a href="#/work/${esc(a.task_id)}">open task</a></dd>
+          <dt>Task goal</dt><dd>${esc(a.goal)} <a href="#/work/${encodeURIComponent(`task:${a.task_id}`)}">open in the workbench</a> · <a href="#/tasks/${esc(a.task_id)}">task log</a></dd>
           <dt>Asked by</dt><dd>${esc(a.task_owner)} (${esc(a.owner_department)})</dd>
           <dt>File</dt><dd class="mono">${esc(a.filename)} · v${esc(a.version)}</dd>
           <dt>SHA-256</dt><dd class="mono small">${esc(a.sha256)}</dd>
@@ -1196,6 +1211,7 @@
       try {
         const reply = await api(`/api/artifacts/${artifactId}/decision`, { method: "POST", body: { approve, comment } });
         toast(approve ? `Released · sha256 ${String(reply.outcome.sha256).slice(0, 12)}…` : "Rejected — the task has one revision.", approve ? "good" : "");
+        if (app.refreshApprovals) app.refreshApprovals();
         route();
       } catch (error) {
         toast(error.message, "bad");
