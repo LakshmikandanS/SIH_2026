@@ -24,6 +24,11 @@ audit log. The sovereignty panel shows, live, that no connection left the deploy
 
 ## Run it on Windows: one command
 
+**New machine?** Run `setup` in the repository folder first. It checks Windows, the GPU,
+Docker Desktop, Ollama, the port and the models. It offers to install or download what is
+missing, then starts Citadel and verifies it. [SETUP.md](./SETUP.md) has the same steps by
+hand, the WSL2 configuration (`setup wsl2`), and troubleshooting.
+
 You need:
 
 - **Docker Desktop**, running.

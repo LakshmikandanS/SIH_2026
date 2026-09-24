@@ -266,9 +266,15 @@ and metrics. Their history, including the bugs each step caught, is in
 
 | Path | Command |
 |---|---|
+| First-time setup on Windows, and re-checking a machine | `setup.cmd` (`setup`, `setup check`, `setup wsl2`); by hand in `SETUP.md` |
 | Windows | `citadel.cmd` |
-| Linux or WSL2 (the ADR-0005 configuration) | `scripts/up.sh` |
+| Linux or WSL2 (the ADR-0005 configuration) | `scripts/up.sh`, after `ops/wsl2/provision.sh` inside the distro |
 | No containers | `scripts/run.sh [--fake-models]` |
+
+`setup.cmd` runs `ops/windows/setup.ps1`. That script is written for Windows PowerShell 5.1
+in pure ASCII. It never names a model: it reads the `enabled: true` entries from
+`registry/models.demo-local.yaml` (invariant 1). It asks before it installs, downloads or
+starts anything.
 
 **The Compose stack has not yet run on a real Docker daemon.** The environment it was built
 in cannot start one. There, the stack's process model ran in network namespaces:
