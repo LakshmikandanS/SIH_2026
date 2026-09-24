@@ -41,6 +41,7 @@ Controls live as `.txt` so they are never imported or collected by pytest.
 | `test_no_egress` | No outbound network call outside the allowed clients | A `requests.get("https://…")` |
 | `test_no_external_urls_in_build` | Frontend assets reference no external host | An asset with a CDN URL |
 | `test_profile_ceiling_enforced_at_ingest` | Ingest refuses a document above the active profile's `classification_ceiling` | An ingest path that defaults a missing classification |
+| `test_scripts_are_executable` | Every shell script the docs or a container run (`scripts/`, `ops/`; not the sourced `scripts/lib/`) is committed executable | A `scripts/run.sh` written without its execute bit, in a temporary tree (skipped on a filesystem with no execute bit) |
 
 ## Write them as AST checks where you can
 

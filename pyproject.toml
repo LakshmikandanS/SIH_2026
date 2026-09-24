@@ -134,6 +134,7 @@ module = [
     "test_no_string_classification_compare",
     "test_profile_ceiling_enforced_at_ingest",
     "test_single_chokepoint",
+    "test_scripts_are_executable",
     "test_classification",
     "test_contracts_is_self_contained",
     "test_domain",
