@@ -169,6 +169,7 @@
     timers: [],
     stream: null, // { taskId, controller }
     taskCache: new Map(),
+    cleanups: [], // run when the view changes (a view's own streams, listeners)
   };
 
   function clearTimers() {
@@ -301,15 +302,32 @@
 
   // ---------------------------------------------------------------- router
   const views = {};
+  // A view may refuse to be left (the workbench, with an unsaved report edit): each guard
+  // returns a reason, or nothing.
+  app.leaveGuards = [];
+  let shownHash = location.hash;
   function route() {
     if (!session.token) return;
+    const view = (hash) => (hash || "#/work").split("/")[1] || "work";
+    if (view(shownHash) !== view(location.hash)) {
+      const reason = app.leaveGuards.map((guard) => guard()).find(Boolean);
+      if (reason) {
+        history.replaceState(null, "", shownHash || "#/work");
+        toast(reason, "bad");
+        return;
+      }
+    }
+    shownHash = location.hash;
     stopStream();
     clearTimers();
+    app.cleanups.splice(0).forEach((fn) => { try { fn(); } catch (_) { /* best effort */ } });
     const [, name = "work", arg = ""] = (location.hash || "#/work").split("/");
     $$(".nav-item").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
     const render = views[name] || views.work;
     const root = $("#view");
     root.innerHTML = "";
+    root.className = "view";
+    $("#shell").classList.toggle("ide-mode", render === views.work);
     render(root, decodeURIComponent(arg)).catch((error) => {
       if (error instanceof ApiError && error.status === 401) return;
       root.innerHTML = `<div class="notice bad">${esc(error.message)}</div>`;
@@ -397,10 +415,10 @@
     ["Standard lookup", "What corrosion allowance does standard CS-12 require for carbon steel exchanger shells?"],
   ];
 
-  views.work = async (root, taskId) => {
+  views.tasks = async (root, taskId) => {
     const levels = allowedLevels(session.user.clearance);
     root.innerHTML = `
-      <div class="view-head"><div><h1>Workbench</h1>
+      <div class="view-head"><div><h1>Task log</h1>
         <div class="sub">Describe the work in your own words. An agent plans it, uses only the tools and documents you may use,
         cites every fact, and hands any deliverable to an approver. Nothing runs inside this page — tasks run in the worker,
         and this view follows their journal live.</div></div></div>
@@ -439,7 +457,7 @@
         const task = await api("/api/tasks", { method: "POST", body: { goal, classification: $("#task-level").value } });
         $("#goal").value = "";
         toast("Task submitted — a worker will pick it up.");
-        location.hash = `#/work/${task.id}`;
+        location.hash = `#/tasks/${task.id}`;
       } catch (error) {
         toast(error.message, "bad");
       } finally {
@@ -472,7 +490,7 @@
         )
         .join("");
       $$(".task-item", list).forEach((item) =>
-        item.addEventListener("click", () => (location.hash = `#/work/${item.dataset.task}`))
+        item.addEventListener("click", () => (location.hash = `#/tasks/${item.dataset.task}`))
       );
     } catch (error) {
       if (!quiet) list.innerHTML = `<div class="notice bad">${esc(error.message)}</div>`;
@@ -754,9 +772,45 @@
     return `<div class="step ${kind}"><div class="icon">${icon}</div><div><div class="title">${title}</div>${detail ? `<div class="detail">${detail}</div>` : ""}</div></div>`;
   }
 
+  function agentTag(entry) {
+    const who = entry.agent_id;
+    if (!who) return "";
+    const label = who.startsWith("human:") ? `👤 ${who.slice(6)}` : who.replace("_", " ");
+    return `<span class="pill agent ${who.startsWith("human:") ? "human" : ""}">${esc(label)}</span> `;
+  }
+
   function renderStep(entry, taskId) {
+    const html = renderStepBody(entry, taskId);
+    if (!html || !entry.agent_id) return html;
+    return html.replace('<div class="title">', `<div class="title">${agentTag(entry)}`);
+  }
+
+  function renderStepBody(entry, taskId) {
     const p = entry.payload || {};
     switch (entry.step_type) {
+      case "recalled":
+        return stepShell("", "◆", `Recalled <b>${esc(p.count || 0)}</b> memory item(s) from earlier work`,
+          (p.memories || []).length ? `<ul class="small">${p.memories.map((m) => `<li>${esc(m.content)} <span class="muted">(${esc(m.memory_type)})</span></li>`).join("")}</ul>` : "");
+      case "agents":
+        return stepShell("", "⑃", `<b>Work split across ${esc((p.agents || []).length)} helper agent(s)</b>`,
+          `<ul class="small">${(p.agents || []).map((a) => `<li><b>${esc(a.name)}</b>: ${esc(a.goal)}${(a.depends_on || []).length ? ` <span class="muted">(waits for ${esc(a.depends_on.join(", "))})</span>` : ""}</li>`).join("")}</ul>`);
+      case "agent":
+        return stepShell(p.event === "failed" ? "failed" : p.event === "done" ? "done" : "", p.event === "done" ? "✓" : "◉",
+          `<b>${esc(p.name)}</b> ${esc(p.event === "done" ? "finished" : p.event)}`,
+          p.findings ? `<div class="answer small">${renderAnswer(p.findings)}</div>` : (p.goal ? esc(p.goal) : esc(p.error || "")));
+      case "memory":
+        return stepShell("", "◆", `<b>Memory manager</b>: ${esc(p.summary || p.error || "nothing new")}`,
+          (p.outcomes || []).length ? `<ul class="small">${p.outcomes.map((o) => `<li><b>${esc(o.operation)}</b> ${esc(o.candidate)}${o.fallback ? " (fallback)" : ""}</li>`).join("")}</ul>` : "");
+      case "paused":
+        return stepShell("wait", "⏸", `<b>Paused</b>${p.by ? ` by ${esc(p.by)}` : ""}`);
+      case "pause_requested":
+        return stepShell("wait", "⏸", `Pause requested by ${esc(p.by)} — every agent stops at its next step`);
+      case "resumed":
+        return stepShell("", "▶", `<b>Resumed</b>${p.by && p.by !== "worker" ? ` by ${esc(p.by)}` : ""}`);
+      case "steered":
+        return stepShell("", "✎", `Told by <b>${esc(String(p.by || "").replace("human:", ""))}</b>: ${esc(p.text)}`);
+      case "human":
+        return stepShell("", "✎", `<b>${esc(p.name || p.by)}</b> ${p.action === "edited" ? `edited the deliverable (v${esc(p.version)}, ${statusPill(p.status)})` : p.to ? `told ${esc(p.to)}` : `added a ${esc(p.kind)}`}`, esc(p.summary || ""));
       case "submitted":
         return stepShell("", "•", `Submitted by <b>${esc(p.name || p.by)}</b> (${esc(p.department || "")}) at ${levelPill(p.classification)}`);
       case "claimed":
@@ -771,8 +825,18 @@
           `<ol class="plan-steps">${((p.plan || {}).steps || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>`);
       case "thought":
         return stepShell("", "…", `<span class="thought">${esc(p.text)}</span>`);
-      case "tool_call":
-        return stepShell("tool", "→", `Calls <b>${esc(p.tool)}</b>`, `<span class="mono small">${esc(JSON.stringify(p.arguments)).slice(0, 400)}</span>`);
+      case "tool_call": {
+        const args = p.arguments || {};
+        const draft = args.content;
+        if (draft && typeof draft === "object" && !Array.isArray(draft)) {
+          // A deliverable: what it is and its sections; the whole draft one click away.
+          const heads = Object.values(draft).filter(Array.isArray).flat().map((x) => x && (x.heading || x.title)).filter(Boolean);
+          return stepShell("tool", "→", `Calls <b>${esc(p.tool)}</b>${args.template_id ? ` — <b>${esc(args.template_id)}</b>` : ""}${draft.title ? `: ${esc(draft.title)}` : ""}`,
+            `${heads.length ? `<div class="small">Sections: ${heads.map((h) => esc(h)).join(" · ")}</div>` : ""}
+             <details><summary class="small muted">the draft it sends</summary><pre class="wrap">${esc(JSON.stringify(draft, null, 2).slice(0, 8000))}</pre></details>`);
+        }
+        return stepShell("tool", "→", `Calls <b>${esc(p.tool)}</b>`, `<span class="mono small">${esc(JSON.stringify(p.arguments).slice(0, 400))}</span>`);
+      }
       case "tool_result":
         return renderToolResult(p);
       case "waiting":
@@ -781,9 +845,11 @@
       case "progress":
         return stepShell("wait", "⋯", esc(p.note || `${p.kind || "work"}: ${p.state || ""}${p.sandbox ? ` (${p.sandbox} sandbox)` : ""}`));
       case "revision":
-        return stepShell("wait", "↺", `<b>Revision</b> after review: ${esc(p.comment)}`);
+        return stepShell("wait", "↺", `<b>Revision</b> ${p.kind === "owner" ? "at the asker's request" : "after review"}${p.from_version ? ` from v${esc(p.from_version)}` : ""}: ${esc(p.comment)}`);
       case "revision_requested":
-        return stepShell("wait", "↺", `<b>Sent back for revision</b> (${esc(p.revision)} of 1): ${esc(p.comment)}`);
+        return stepShell("wait", "↺", p.kind === "owner"
+          ? `<b>${esc(p.name || p.by)} asked for a revision</b>: ${esc(p.comment)}`
+          : `<b>Sent back for revision</b> (${esc(p.revision)} of 1): ${esc(p.comment)}`);
       case "decision":
         return stepShell(p.approved ? "done" : "denied", p.approved ? "✓" : "✗", `<b>${p.approved ? "Approved" : "Rejected"}</b> by ${esc(p.name || p.by)}`, esc(p.comment || ""));
       case "probe": {
@@ -1352,6 +1418,18 @@
     every(10000, () => $("#m") && load().catch(() => null));
   };
 
+  // ---------------------------------------------------------------- shared with the workbench
+  // workbench.js builds the IDE-style Workbench view from these, so both speak to the API
+  // the same way and render a journal step, a citation or a tier identically.
+  window.Citadel = {
+    $, $$, esc, LEVELS, TERMINAL, QUIET, levelPill, statusPill, deptPills, ago, ms, allowedLevels, json,
+    session, api, ApiError, blobUrl, download, toast, openModal, closeModal, app, every, clearTimers, stopStream,
+    views, route, renderAnswer, citeChip, showEvidence, renderStep, renderToolResult, renderArtifactRow,
+    bindArtifactButtons, previewArtifact, viewDocument, stat,
+  };
+
   // ---------------------------------------------------------------- start
-  boot();
+  // After every script has run, so the workbench module has registered its view.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else setTimeout(boot, 0);
 })();

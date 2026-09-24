@@ -42,29 +42,32 @@
 
   <div id="shell" class="shell" hidden>
     <nav class="sidebar" aria-label="Main">
-      <a href="#/work" data-view="work" class="nav-item">
-        <span class="nav-icon">▸</span>Workbench
+      <a href="#/work" data-view="work" class="nav-item" title="Workbench">
+        <span class="nav-icon">▸</span><span class="label">Workbench</span>
       </a>
-      <a href="#/documents" data-view="documents" class="nav-item">
-        <span class="nav-icon">▤</span>Documents
+      <a href="#/tasks" data-view="tasks" class="nav-item" title="Task log">
+        <span class="nav-icon">☰</span><span class="label">Task log</span>
       </a>
-      <a href="#/search" data-view="search" class="nav-item">
-        <span class="nav-icon">⌕</span>Search &amp; access
+      <a href="#/documents" data-view="documents" class="nav-item" title="Documents">
+        <span class="nav-icon">▤</span><span class="label">Documents</span>
       </a>
-      <a href="#/approvals" data-view="approvals" class="nav-item">
-        <span class="nav-icon">✓</span>Approvals <span class="nav-count" id="approvals-count" hidden></span>
+      <a href="#/search" data-view="search" class="nav-item" title="Search &amp; access">
+        <span class="nav-icon">⌕</span><span class="label">Search &amp; access</span>
       </a>
-      <a href="#/models" data-view="models" class="nav-item">
-        <span class="nav-icon">◎</span>Models &amp; routing
+      <a href="#/approvals" data-view="approvals" class="nav-item" title="Approvals">
+        <span class="nav-icon">✓</span><span class="label">Approvals</span> <span class="nav-count" id="approvals-count" hidden></span>
       </a>
-      <a href="#/sovereignty" data-view="sovereignty" class="nav-item">
-        <span class="nav-icon">⛨</span>Sovereignty
+      <a href="#/models" data-view="models" class="nav-item" title="Models &amp; routing">
+        <span class="nav-icon">◎</span><span class="label">Models &amp; routing</span>
       </a>
-      <a href="#/audit" data-view="audit" class="nav-item">
-        <span class="nav-icon">≡</span>Audit &amp; policy
+      <a href="#/sovereignty" data-view="sovereignty" class="nav-item" title="Sovereignty">
+        <span class="nav-icon">⛨</span><span class="label">Sovereignty</span>
       </a>
-      <a href="#/metrics" data-view="metrics" class="nav-item">
-        <span class="nav-icon">∿</span>Metrics
+      <a href="#/audit" data-view="audit" class="nav-item" title="Audit &amp; policy">
+        <span class="nav-icon">≡</span><span class="label">Audit &amp; policy</span>
+      </a>
+      <a href="#/metrics" data-view="metrics" class="nav-item" title="Metrics">
+        <span class="nav-icon">∿</span><span class="label">Metrics</span>
       </a>
       <div class="sidebar-foot" id="sidebar-foot"></div>
     </nav>
@@ -80,5 +83,7 @@
   </div>
 
   <script src="/app.js"></script>
+  <script src="/workbench-tabs.js"></script>
+  <script src="/workbench.js"></script>
 </body>
 </html>
