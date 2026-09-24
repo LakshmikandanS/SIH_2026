@@ -19,11 +19,11 @@ That is the failure this directory prevents.
 |---|---|
 | `models.demo-local.yaml` | Model registry for the RTX 5060 demonstration profile |
 | `models.hpc-eval.yaml` | Model registry for the university HPC evaluation profile |
-| `tools.yaml` | Tool manifest: schema, capabilities, side-effect class, classification ceiling |
+| `tools.yaml` | Tool manifest: schema, capabilities, side-effect class, classification ceiling, and per-tool `options` (`web.search` searches only the `REFERENCE_LIBRARY` folder, `docs.search` everything else; ADR-0010) |
 | `policy.yaml` | Policy rules. Ordered, first match wins, default deny |
 | `roles.yaml` | Role -> capability grants, read by the policy evaluator's `actor.capabilities` |
 | `events.yaml` | Event vocabulary. **Open** — registration, not a closed set |
-| `templates.yaml` | Deliverable templates and their declared placeholders |
+| `templates.yaml` | Deliverable templates, a one-line description each, and their declared sections. `sections` is a list of `{heading, text}` the writer shapes to the request (the `report`); `omit_when_empty` takes an empty optional section and its heading out of the document |
 | `profiles.yaml` | Which files each `CITADEL_PROFILE` loads, plus GPU admission width |
 
 ## Validation is strict

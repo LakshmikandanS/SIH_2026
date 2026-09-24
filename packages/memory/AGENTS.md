@@ -1,79 +1,73 @@
 # AGENTS.md — memory
 
-Three tiers. Working memory is ours; episodic and semantic come from Monarch.
+Three tiers. Working memory belongs to one task; episodic and semantic memory belong to the
+workbench, and are kept by the **memory manager** — Monarch's design, in Citadel's store
+([ADR-0009](../../docs/adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md)).
 
 ## Depends on
 
-`contracts`, `platform`, `gateway`.
+`contracts`, `platform`, `gateway`. Reached by `tools` (the `memory.recall` tool) and by
+`runtime` (writing what a finished task established).
 
 ## The tiers
 
 | Tier | Scope | Where it lives |
 |---|---|---|
-| **Working** | One task. Structured, extensible. Discarded or archived at task end | Here, Postgres |
-| **Episodic** | Across tasks: decisions, outcomes, rejections | Monarch, behind the seam |
-| **Semantic** | Durable organisational facts: equipment, vendors, conventions, people, house style | Monarch, behind the seam |
+| **Working** | One task: its plan, revision request, revision brief. Survives resumption | `WorkingMemory(db, task_id)`, Postgres |
+| **Episodic** | What happened: a task's outcome, an approver's decision and comment | `memories` (tier `episodic`), Postgres |
+| **Semantic** | What is true: equipment, costs, workload, vendors, conventions, lessons | `memories` (tier `semantic`), Postgres |
 
-Memory writes are deliberate operations with a lifecycle. Never a side effect of a chat
-turn.
+Memory writes are deliberate operations with a lifecycle — at a task's end, at a decision,
+or by a person — never a side effect of a model turn.
 
-## Monarch is a dependency, never a merge
+## The pipeline (Monarch's)
 
-Hard constraint. Two repositories, one dependency relationship. Installed as a
-**version-pinned package** (it already has `src/` layout, `pyproject.toml`, setuptools,
-entry points). Not a submodule. Not vendored source. The built wheel goes into the offline
-bundle.
+```
+text -> extract candidates -> for each: related memories (same compartment, same tier)
+     -> a model proposes ONE of: create, update, merge, contradict, ignore, archive
+     -> a deterministic executor disposes; anything unusable -> create (lossless)
+```
 
-## ⚠️ The seam does not exist yet
+- `MemoryManager.extract` asks a model for candidates and **validates** them (shape, type
+  name, tier); it does not trust them.
+- `MemoryManager.propose` runs one candidate through the flow. `use_model=False` stores it
+  as proposed; `replaces_same_task=True` (a task's outcome) updates that task's earlier
+  record of the same kind instead of adding a second one.
+- Every decision — `ignore` included — is a row in `memory_events` and an audit event
+  (`memory.create` … `memory.archive`, `memory.edit`, `memory.restore`).
+- `consolidate.remember_task` / `remember_decision` are what `runtime` calls.
 
-The handoff describes it as though it were already there. Reading Monarch's code, it is
-not:
+## Scope is the point
 
-- `Memory` (`memory/models.py`) has **no scope, tenant or owner field**.
-- `retrieve_memories(query, top_k)` takes **no visibility predicate**. It calls
-  `repository.search_similar(...)` — a global search over one store — then filters
-  `status == ACTIVE` **in Python, after retrieval**.
-- `repository` and `config` are module-level singletons, so there is no per-caller context
-  to thread a scope through.
+Every memory carries a **classification and an ACL, exactly as a document does**.
 
-**Monarch post-filters.** Wiring Citadel's memory tiers to it as it stands would import
-into the memory path exactly the pattern Citadel refuses in the retrieval path — and
-organisational memory is not less sensitive than the document corpus.
+1. **Retrieval filters in SQL**, in the same statement as the vector search (invariant 5).
+   `recall`, `browse`, `get` and the related-memory search never read a memory the caller
+   may not see into Python. `test_memory_manager.py` checks the raw rows with a spy, and a
+   negative control proves the same query does return them to someone cleared.
+2. **A candidate is only compared with — and so can only mutate — memories of its own
+   compartment** (same classification, same ACL) and tier. Merging a CONFIDENTIAL finding
+   into an INTERNAL memory would be a leak with extra steps.
+3. **People curate within what they may see**: state (`remember`), `edit`, archive and
+   restore. Nothing else; `superseded` is the executor's word, not a person's.
 
-So the seam is an **upstream change to Monarch**, not an adapter on this side:
+## Memories are grounding, not evidence
 
-1. A `scope_key` on the memory record — opaque to Monarch, indexed.
-2. A visibility predicate accepted by `retrieve_memories` and **pushed into the LanceDB /
-   SQLite query**, not applied after.
-3. Repository and config injected per call or per session, without which (1) and (2) have
-   nowhere to live.
-
-### Until then
-
-**Working memory only.** Episodic and semantic sit behind an interface in this package with
-no implementation. M5 needs them; that is the deadline. M0–M4 are not blocked.
-
-Write the interface now, in Citadel's vocabulary, so that when Monarch changes the
-integration is an implementation and not a redesign.
-
-**Built.** `WorkingMemory(db, task_id)` keeps `put`, `get`, `all` and a bounded `append`
-in Postgres. The agent keeps its plan and revision request there, and resumption reads
-them back alongside the journal. `EpisodicMemory` and `SemanticMemory` are Protocols in
-Citadel's vocabulary (`MemoryScope`, `MemoryRecord`, with the scope as part of every
-call). Their only implementation is `Unconfigured`, which raises `MemoryNotConfigured`
-instead of returning an empty result that would look like "nothing remembered". `status()`
-says which tiers exist. Nothing is wired to Monarch.
+An agent recalls memories before it plans (through the chokepoint, as `memory.recall`) to
+know where to look and what went wrong last time. A deliverable cites documents (E#) and
+computations (C#), **never a memory**. A stale memory costs a search, not a false sentence.
 
 ## Vocabulary
 
-Monarch's `MemoryType` is person-centric (`USER_PREFERENCE`, `PERSONAL_FACT`,
-`TECHNICAL_SKILL`, …), as are `Predicate` and `ObjectType`. Citadel needs document- and
-equipment-oriented types.
+`memory_type` is open (`^[a-z][a-z0-9_]{1,40}$`). `SUGGESTED_TYPES` lists the common ones
+(`equipment_fact`, `cost_fact`, `outcome`, `rejection`, `lesson` …); a model or a person
+may use another. A closed enum here would be the closed-vocabulary failure the root
+AGENTS.md names.
 
-**The answer is neither "change Monarch's enum" nor "extend on the Citadel side" — it is
-to make the vocabulary open.** A closed `StrEnum` that rejects `EQUIPMENT_FACT` is the same
-bug as an event vocabulary closed at sixteen. Monarch accepts a registered vocabulary,
-Citadel registers its terms at startup, and neither repository learns the other's domain.
+## Monarch
 
-Monarch brings SQLite + LanceDB alongside Citadel's Postgres, so the app box runs two
-storage engines from M5. That is the price of the seam, and the seam is the point.
+Monarch is not a dependency. Its store has no scope on a record, searches globally and
+filters in Python afterwards, and keeps its repository in module-level singletons (ADR-0009
+§Context). The shared part — the six operations, the mutation prompt's shape, meaning ×
+recency scoring — is named in `manager.py`'s header so that a port from Monarch stays
+deliberate. If Monarch grows the seam, depending on it becomes an option again.

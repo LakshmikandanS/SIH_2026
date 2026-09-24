@@ -18,10 +18,42 @@ tag was never on the table regardless of network access. This is an interim, san
 substitution, not a change of direction -- the Vite+React+Tailwind build above is still the
 real target for the WSL2 machine (ADR-0005), which has ordinary internet access.
 
-What it covers is a single-page app (`app.js`, hash routes, no dependencies) with eight
-views:
+What it covers is a single-page app (`app.js`, hash routes, no dependencies) with a
+workbench and eight further views.
 
-- **Workbench.** Submit a goal at a chosen classification and follow the task live. The
+**The workbench** (`#/work`, [ADR-0008](../docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)) is an IDE for reports, laid out
+as the vision image drew it. Its code is in `workbench.js` (the layout and the command
+line) and `workbench-tabs.js` (one object per tab kind: `{title, icon, render}`). The two
+files share `app.js`'s helpers through `window.Citadel`.
+
+- **Left.** The resource tree: every document the person may read, by folder and version,
+  and the database tables. Their reports. The tools running now, and a Tools panel with
+  what is available, what is active and the history.
+- **Centre.** Tabs and a resizable command line (`/help` lists the commands).
+  - **Welcome**: write a report from a prompt.
+  - **Task file** (`/task`): write a long request, then Commit.
+  - **Task**: agent cards (click one for its goal, current step, completed work, tools and
+    what it waits for), the live journal, shared state and a note form.
+  - **`agent_N.plan`**: one agent's plan.
+  - **Report**: the editor. Every template section is editable, including headings and
+    paragraphs, with add, move and remove a section. Click evidence to insert its id.
+    **Save as vN** (or Ctrl+S) renders and verifies a new version. **Revise** sends the
+    report back to the agents. A version picker, preview and download. Unsaved edits are
+    flagged. They are never lost silently: switching version, closing the tab, leaving
+    the workbench (`app.leaveGuards`) or the page each stop and say so, and **Discard**
+    returns to the saved version.
+  - **Document**: its versions and what changed between them.
+  - Observability panels, sandbox state and memory.
+- **Right.** Observability, metrics and evaluation. The environment and sandbox-state
+  tree. The activity feed, in words.
+- The open tabs last for the browser session (`sessionStorage`); the active tab is in the
+  URL (`#/work/<tab>`), and the command line's height is remembered in `localStorage`.
+  Every storage call is wrapped, and the page works without storage.
+
+The other views:
+
+- **Task log** (`#/tasks/<id>`, the original task view). Submit a goal at a chosen
+  classification and follow the task live. The
   journal streams over SSE, read with `fetch()` so that the bearer token travels in a
   header and never in a URL. The view shows the plan, each step's routing breakdown, tool
   calls and their results rendered by output shape, citation chips that open the source

@@ -236,3 +236,21 @@ demonstration form: models and routing, ingestion with OCR and vision, ACL-filte
 retrieval, the agent loop, deliverables with verification and approval, and sovereignty
 telemetry with the probe. The four M1 measurements below have **not** been run on the
 real card, so the routing scores still use estimated VRAM and swap figures.
+
+**Beyond the plan, at Fahim's request (2026-09-23):** report writing in an IDE-style
+workbench, where agents and people work on the same task
+([ADR-0008](./adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)).
+It brought:
+
+- helper agents with a shared state;
+- pause, steer, notes and tool runs by people;
+- a report shaped by its prompt, edited by hand or revised by the agents, every version
+  verified;
+- the memory manager ([ADR-0009](./adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md));
+- the offline reference library behind `web.search`
+  ([ADR-0010](./adr/0010-web-search-is-the-offline-reference-library.md)).
+
+To the four measurements add a fifth: **does the local reasoning model follow a report
+request's sections?** That means one section per thing asked, in order, every paragraph
+cited, and nothing that was not asked for. Measure it on the same prompts the scripted
+stand-in answers in `packages/runtime/tests/test_workbench.py`.

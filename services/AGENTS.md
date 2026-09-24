@@ -4,8 +4,8 @@ The deployable processes. These may import any package; nothing imports them.
 
 | Service | Runs | What it is |
 |---|---|---|
-| `api` | App box | Starlette + uvicorn. Auth, task submit/cancel/probe, SSE task streams, documents and uploads, artifacts and approval decisions, models and routing, sovereignty, audit, metrics — and the web UI (`web/src/`) mounted on the same origin |
-| `worker` | App box | Task threads (claim with `SKIP LOCKED`, run the agent loop, write the journal), ingestion threads behind CPU admission, resident-set warm-up, and — with `CITADEL_SEED_CORPUS=1` — the demo corpus, once the approved models are installed |
+| `api` | App box | Starlette + uvicorn. Auth, task submit/cancel/probe, SSE task streams, documents (folders, versions, diffs) and uploads, artifacts and approval decisions, models and routing, sovereignty, audit, metrics; the workbench (`routes_workbench.py`: pause/resume, revise, notes, a person's tool runs, drafts, activity, tools, environment and sandbox state; `routes_artifacts.py`: a report's content and its edits; `routes_memory.py`; `routes_observe.py`: the observability panels) — and the web UI (`web/src/`) mounted on the same origin |
+| `worker` | App box | Task threads (claim with `SKIP LOCKED`, run the agent loop and its helpers, write the journal), ingestion threads behind CPU admission, resident-set warm-up, and — with `CITADEL_SEED_CORPUS=1` — the demo corpus, once the approved models are installed |
 | `sandbox` | App box | One hardened service on an internal-only network that verifies a receipt and runs model-authored Python ([ADR-0007](../docs/adr/0007-the-sandbox-is-a-service-not-a-container-per-run.md)) |
 
 All three run from one image (`ops/compose/Dockerfile`) and one Compose file
@@ -26,6 +26,11 @@ backend has to be fetched for the workspace packages themselves.
 **Real `uv` workspace members.** Root `pyproject.toml` lists `services/api`,
 `services/worker` and `services/sandbox`, and each declares its real third-party
 dependencies — a `.venv` built by `uv sync` must contain everything the service imports.
+
+The api and the worker each write a heartbeat row every few seconds
+(`citadel_platform.heartbeat`, `service_heartbeats`): process figures from `/proc`, the
+standard library only, plus the worker's running tasks and GPU admission. The container
+health and resource panels read them. A heartbeat that fails is printed, never raised.
 
 `python -m citadel_worker missing-models` answers "which approved models does the runtime
 lack" from the registry and the runtime alone (exit 2: the runtime is not answering); the

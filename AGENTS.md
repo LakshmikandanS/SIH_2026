@@ -1,6 +1,6 @@
 # AGENTS.md — Citadel
 
-Read this file completely before writing any code. Then read the seven ADRs in
+Read this file completely before writing any code. Then read the ten ADRs in
 `docs/adr/`:
 
 - 0001: founding decisions
@@ -10,6 +10,9 @@ Read this file completely before writing any code. Then read the seven ADRs in
 - 0005: the WSL2 execution environment
 - 0006: the Docker Desktop launcher and per-container enforcement
 - 0007: the sandbox as a service
+- 0008: a workbench where agents and people write reports together
+- 0009: the memory manager, Monarch's design in Citadel's store
+- 0010: "web search" is the offline reference library
 
 Then read the `AGENTS.md` in the package you are about to touch. Do not skip to the code.
 
@@ -82,7 +85,7 @@ services/{api,worker,sandbox}   ← may import anything
         │
    runtime            ← contracts, platform, gateway, tools, memory
         │
-   tools              ← contracts, platform, gateway, knowledge, deliverables
+   tools              ← contracts, platform, gateway, knowledge, deliverables, memory
         │
  knowledge   memory          ← contracts, platform, gateway
  deliverables  sovereignty     ← contracts, platform
@@ -114,9 +117,9 @@ actually enforces the rule. Do not trust the manifest and skip the test.
 | `platform` | Postgres access, migrations, audit chain writer, config and registry loading, tracing, metrics |
 | `gateway` | Model registry, health probing, routing with retained score breakdown, residency, the `InferenceProvider` implementations |
 | `knowledge` | Ingestion (detect → OCR/vision → normalise → chunk → embed → index), hybrid retrieval, reranking, citation assembly |
-| `memory` | Working memory (task-scoped, Citadel-side). Episodic and semantic behind the Monarch seam |
+| `memory` | Working memory (task-scoped). Episodic and semantic memory kept by the memory manager: Monarch's pipeline, scoped like documents (ADR-0009) |
 | `tools` | Tool plugins with declared schemas, the policy chokepoint, the tool registry |
-| `runtime` | Planner, agent loop, replanner, step journal, budgets, cancellation, worker pool |
+| `runtime` | Planner, agent loop, replanner, step journal, budgets, cancellation, worker pool; a lead with helper agents, shared state, and people working on the same task (ADR-0008) |
 | `deliverables` | Template registry, docx/xlsx/pptx generators, the four-tier verification ladder, release and hashing |
 | `sovereignty` | Egress telemetry, per-task sovereignty report, the deliberate probe |
 
@@ -212,8 +215,26 @@ Getting there pulled a good deal of M1–M5 forward of PLAN-M0's milestone order
 explicit request ("complete the project"). The order below is the dependency order, not
 the order the milestones planned.
 
+**Report writing in a workbench** ([ADR-0008](./docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)),
+at Fahim's request: "the main task to focus is report writing: agent can give report
+accordingly to user prompt, user can modify if he wants."
+
+- **Shaped by the prompt.** `/report on lathe L-1 covering only its condition and the vendor
+  options` produces a `report` with exactly those two sections. Every paragraph is cited,
+  and every version is rendered and verified.
+- **Edited by hand, or revised by the agents.** The person edits any section in the
+  report tab and saves it as a new verified version, or sends it back with an
+  instruction (**Revise**). The agents then start from the newest verified version, hand
+  edits included.
+- **The room around it** is the IDE the vision image drew:
+  - a resource tree, tabs and a command line;
+  - agent cards and helper agents sharing one task state;
+  - people pausing, steering, adding notes and running tools through the same chokepoint;
+  - observability, sandbox-state and activity panels;
+  - the memory manager ([ADR-0009](./docs/adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md)).
+
 **Foundations** (M0 tasks 1–9, 13): `citadel_contracts`, the structural suite (every
-detector with a negative control), strict registry loading, migrations `0001`–`0009`, the
+detector with a negative control), strict registry loading, migrations `0001`–`0010`, the
 hash-chained audit log, identity and the seeded demo cast, the policy evaluator, tracing
 and metrics. Their history, including the bugs each step caught, is in
 `docs/history/m0-build-notes.md`.
@@ -224,17 +245,20 @@ and metrics. Their history, including the bugs each step caught, is in
 |---|---|
 | `gateway` | Ollama and vLLM providers; deterministic routing with a retained per-candidate score breakdown; fallback that says so; structured output with honest retries; GPU admission; residency and warm-up; pulls a human starts. Its HTTP clients never honour proxy variables. |
 | `knowledge` | Ingestion (detect → PDF text / OCR → vision reading of scanned pages → chunk → embed) behind CPU admission. Retrieval filters by ACL and classification in the same SQL statement as the vector search, then does reciprocal-rank fusion with lexical search and a CPU rerank, and counts denials. Evidence ids: E# for document regions, C# for computations. |
-| `tools` | The chokepoint (`Chokepoint.invoke`): resolve → validate the JSON schema → evaluate policy → audit allow and deny → sign a receipt bound to the resource digest → dispatch. Nothing is released unless the executing boundary verified the receipt. The ten tools in `registry/tools.yaml` are plugins discovered from their manifest. `sandbox.run_verified` is the code boundary. |
-| `deliverables` | docx and xlsx from the three templates in `registry/templates/`; the four-tier verification ladder, driven by each template's declaration; approval with separation of duties; re-render, hash and release with a provenance record. |
-| `runtime` | Planner (free-form plans against the real goal), agent loop, a journal with a task resumable from it, budgets checked each iteration, cancellation, one bounded revision after a rejection, and a worker pool claiming with `SKIP LOCKED`. |
-| `memory` | Working memory, task-scoped, in Postgres. Episodic and semantic are protocols behind the Monarch seam, unimplemented (see that package's AGENTS.md). |
+| `tools` | The chokepoint (`Chokepoint.invoke`): resolve → validate the JSON schema → evaluate policy → audit allow and deny → sign a receipt bound to the resource digest → dispatch. Nothing is released unless the executing boundary verified the receipt. The fifteen tools in `registry/tools.yaml` are plugins discovered from their manifest, `web.search` among them as the offline reference library ([ADR-0010](./docs/adr/0010-web-search-is-the-offline-reference-library.md)). People run them through the same function. `sandbox.run_verified` is the code boundary. |
+| `deliverables` | docx and xlsx from the four templates in `registry/templates/`, the `report` among them, whose sections follow the request; the four-tier verification ladder, driven by each template's declaration and applied per paragraph for a report; every edit a new verified version; approval with separation of duties where a template asks for it; re-render, hash and release with a provenance record. |
+| `runtime` | Planner (free-form plans against the real goal), agent loop, a journal with a task resumable from it, budgets checked each iteration, cancellation, pause and resume, helper agents in dependency waves with a shared state, people's steps journalled as `human:<id>`, one bounded revision after a rejection and up to five at the owner's request, `/ask` tasks, and a worker pool claiming with `SKIP LOCKED`. |
+| `memory` | Working memory, task-scoped. Episodic and semantic memory in Postgres, kept by the memory manager: extract → related (same compartment and tier) → a model proposes one of six operations → a deterministic executor, with `create` as the lossless fallback. Filtered in SQL like documents; grounding, never evidence. |
 | `sovereignty` | Telemetry (an audit-hook monitor and a psutil connection scanner, both attributed to task and agent), the in-process fence, the deliberate probe, and the panel and per-task reports. Enforcement is `ops/compose/egress-entrypoint.sh` plus `ops/nftables/citadel-egress.nft`, applied per container. |
 
 **Services** (`services/AGENTS.md`):
 
-- `api`: HTTP, SSE task streams and the web UI.
+- `api`: HTTP, SSE task streams, the workbench's endpoints (reports, edits, revisions,
+  notes, drafts, activity, panels, memory) and the web UI.
 - `worker`: task threads, ingestion, and seeding the demo corpus once the approved models
   are installed.
+- Both write a heartbeat row every few seconds (`service_heartbeats`), which the container
+  health panel reads.
 - `sandbox`: one hardened service on an internal network, not a container per run,
   [ADR-0007](./docs/adr/0007-the-sandbox-is-a-service-not-a-container-per-run.md).
 
@@ -270,9 +294,11 @@ accepts the ruleset in a container namespace. The panel says so either way.
 **Two substitutions from the build sandbox still stand**: Starlette + uvicorn for FastAPI,
 and hand-written HTML/CSS/JS for Vite + React (`services/AGENTS.md`, `web/AGENTS.md`).
 
-**`scripts/check.sh` is green**: 360 tests pass and 1 is skipped (the psycopg audit
-writer, which has no driver in the build sandbox). `mypy --strict` is clean across 145
-files, and so is ruff.
+**`scripts/check.sh` is green**: 396 tests pass and 1 is skipped (the psycopg audit
+writer, which has no driver in the build sandbox). `mypy --strict` is clean across 157
+files, and so is ruff. The workbench has also been walked in a browser (Playwright) against
+`scripts/run.sh --fake-models`: a report from a prompt, a hand edit, a revision by the
+agents, an uncited number flagged, `/ask`, and every panel, with no page errors.
 
 **Not done, and where to resume:**
 
@@ -283,9 +309,12 @@ files, and so is ruff.
 3. **The two-box Compose override**, and the host-level ruleset for a WSL2 distro
    (ADR-0006, *Revisit when*).
 4. **PowerPoint deliverables.**
-5. **Episodic and semantic memory**, which need the upstream Monarch change.
-6. **Real sign-in.** Demonstration identities have no password.
-7. **The `hpc-eval` profile**, which loads and routes but has never run on the cluster.
+5. **Real sign-in.** Demonstration identities have no password.
+6. **The `hpc-eval` profile**, which loads and routes but has never run on the cluster.
+7. **The report editor on real models.** Report writing, editing and revision have been
+   walked end to end with the scripted stand-in model, in a browser. Whether `qwen3:4b`
+   follows the section instructions as well is an M1 measurement, like structured-output
+   conformance.
 
 ### Verifying the repo: `scripts/check.sh`
 

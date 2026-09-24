@@ -85,6 +85,26 @@ Outputs are harvested by shape, not by tool name. A `ToolOutput` carries `eviden
 agent loop never learns which tool produced what. `tests/structural/test_single_chokepoint.py`
 keeps `execute_tool`/`dispatch_tool`/`TOOL_REGISTRY` from appearing anywhere else.
 
+**The fifteen tools** (`registry/tools.yaml`). Documents, the workspace, code, sheets,
+vision, generation and calculation, plus five added for the workbench
+([ADR-0008](../../docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)):
+
+| Tool | What it is |
+|---|---|
+| `docs.diff` | What changed between two issues of a document, sentence by sentence, each side cited |
+| `web.search` | The **offline reference library**: literature imported through review, in the `REFERENCE_LIBRARY` folder ([ADR-0010](../../docs/adr/0010-web-search-is-the-offline-reference-library.md)). `docs.search` excludes that folder; both are one store under one ACL predicate, split by `options` in the registry |
+| `memory.recall` | What the workbench remembers, filtered by the task's own scope in SQL ([ADR-0009](../../docs/adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md)). Grounding, never evidence |
+| `workbench.inspect` | For `/ask` about the work itself: tasks, agents, shared state, what was used |
+| `state.note` | An agent adds a fact, decision, assumption, question or note to its task's shared state |
+
+A person can run a tool on their own task (`POST /api/tasks/{id}/tools/{tool}`). It is
+the same `Chokepoint.invoke`, with the context's `agent_id` set to `human:<id>` and a
+receipt like any other. There is no side door for people either.
+
+Search results carry keyword-in-context passages (`passage_window`). The window around a
+chunk is chosen to cover the query's rarest terms, so a fact at the end of a long chunk is
+still shown to the model.
+
 ## The sandbox
 
 The only component permitted to execute model-authored code. It is **one hardened service

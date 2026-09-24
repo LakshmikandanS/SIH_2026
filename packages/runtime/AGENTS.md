@@ -97,11 +97,13 @@ whole agentic tasks inside one request and told users to expect 20–40 seconds.
   by output shape (`evidence`, `artifacts`, `summary`). Replanning happens when
   observations call for it. The finish step is checked for unknown citations and for a
   deliverable the plan promised.
-- **Journal.** Step types: `submitted`, `claimed`, `model_call` (with the routing
-  decision), `planned`, `replanned`, `thought`, `tool_call`, `tool_result`, `waiting`,
-  `progress`, `revision`, `revision_requested`, `decision`, `probe`, `cancel_requested`,
-  `finished`, `failed` and `cancelled`. A reclaimed stale task resumes from its journal
-  and working memory.
+- **Journal.** Step types: `submitted`, `claimed`, `recalled`, `model_call` (with the
+  routing decision), `planned`, `replanned`, `agents`, `agent`, `thought`, `tool_call`,
+  `tool_result`, `waiting`, `progress`, `steered`, `human`, `pause_requested`, `paused`,
+  `resumed`, `revision`, `revision_requested`, `decision`, `memory`, `probe`,
+  `cancel_requested`, `finished`, `failed` and `cancelled`. Each entry names its
+  `agent_id` (`lead`, `agent_N`, or `human:<id>`). A reclaimed stale task resumes from
+  its journal and working memory.
 - **Budgets.** Steps, tokens and wall clock (`BudgetLimits`), checked every iteration.
   Waiting on GPU admission is journalled as `waiting` with the queue depth.
 - **Worker pool.** `claim_next` uses `FOR UPDATE SKIP LOCKED`, reclaims stale tasks after
@@ -111,3 +113,47 @@ whole agentic tasks inside one request and told users to expect 20–40 seconds.
   one bounded revision (`citadel_runtime.worker.MAX_REVISIONS = 1`).
 - **Degrading honestly.** When no model is eligible, or the runtime fails, the task
   fails with the reason; nothing is substituted silently.
+
+## A team, and people, on one task ([ADR-0008](../../docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md))
+
+- **`TaskRun` coordinates; `AgentLoop` acts.** The lead (`agent_id = "lead"`) plans. The
+  plan may add up to `prompts.MAX_AGENTS` helpers (`agent_1` …), each with a goal, the
+  tools it should favour and `depends_on`. Helpers run in dependency waves on a thread
+  pool, each within `BudgetLimits.agent_steps`. A waiting helper is handed its
+  dependencies' findings and evidence (`_hand_over`). The lead writes the deliverable.
+  Their rows are in `task_agents`; every journal entry carries its `agent_id`.
+- **Shared state** (`task_shared_state`) holds plan, decision, fact, assumption,
+  question and note. It is shown to every agent at its next step and survives
+  resumption. Agents write to it with `state.note`, people through the API.
+- **People are journalled as `human:<id>`.** A person may pause, resume, cancel, add
+  notes, steer one agent (`steered`, delivered at its next step), run a tool through the
+  chokepoint, edit the deliverable (`after_edit`) or ask for a revision
+  (`request_revision`). Pause is cooperative: `pause_requested` takes effect at the next
+  step check, and the task resumes from its journal.
+- **Kinds.** `task` produces a deliverable; `ask` answers in a paragraph with citations and
+  may inspect the work itself (`workbench.inspect`).
+
+## Report writing
+
+- The planner is told each template's description. A `sections` field is described as
+  "one section per thing the person asked for, in the order they asked", and optional
+  sections the template leaves out when empty are described as "leave it out unless it
+  was asked for".
+- **The owner's revision** (`tasks.request_revision`, at most `MAX_OWNER_REVISIONS = 5`)
+  and the approver's rejection share one path, `_begin_revision`:
+  - The lead starts from `latest_deliverable()`: the newest **verified** version, a
+    person's edits included.
+  - It carries a standing `brief` ("REVISION REQUESTED: … CURRENT VERSION (vN …) -- revise
+    THIS").
+  - The brief is persisted in working memory, so a worker that dies mid-revision resumes
+    with it.
+- `LATEST_VERSION` is the SQL fragment that keeps superseded versions out of "awaiting
+  approval" and out of the memory of how a task ended.
+
+## Memory
+
+Before planning, the lead recalls what the workbench remembers through the `memory.recall`
+tool (journalled as `recalled`). At the end, `_remember` runs before `_end`: the outcome
+(updated in place when the same task ends again), the helpers' findings and the facts
+people stated go through the memory manager (`packages/memory/AGENTS.md`). Memory failures
+are journalled and never change how a task ended.

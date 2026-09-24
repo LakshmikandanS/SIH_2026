@@ -8,14 +8,16 @@ tooling, reviews of scanned drawings and inspection reports. None of it can go t
 assistant. Citadel runs entirely on the organisation's own hardware. It produces real
 deliverables rather than chat replies, and it proves that nothing left the building.
 
-You describe the work in your own words and an agent does it:
+You describe the work in your own words and an agent (or a small team of them) does it:
 
 - **Plans** the task from your goal.
 - **Uses only what you are cleared for**: the tools and documents your identity allows.
 - **Cites every fact** back to a page and a region of the source.
+- **Writes the report you asked for**, with one section per thing you asked for, in a
+  workbench where you can edit any section yourself or send it back for revision.
 - **Runs code in a sandbox.**
-- **Hands deliverables to an approver**: a Word approval note, an Excel calculation, or a
-  verified script.
+- **Hands deliverables to an approver** where a template asks for one: a Word approval
+  note, an Excel calculation, or a verified script.
 
 Every model call is routed with a visible reason. Every decision lands in a hash-chained
 audit log. The sovereignty panel shows, live, that no connection left the deployment.
@@ -46,7 +48,8 @@ the Python packages and the Postgres image; later starts take seconds. The launc
 3. Opens `http://127.0.0.1:8000`.
 
 **Once the models are installed, the worker ingests the demonstration corpus by itself.**
-That is seven documents, three of them scans, and takes a minute or two. The worker waits
+That is sixteen documents in department folders, three of them scans, plus a later issue
+of Policy 1, and takes a few minutes. The worker waits
 for the models on purpose: scans ingested without them would be read without vision and
 indexed without embeddings, and would stay that way.
 
@@ -76,8 +79,51 @@ Sign in as one of three seeded identities. There is no password at demonstration
 | S. Nair (`demo-engineer-2`) | engineer | CONFIDENTIAL | instrumentation |
 | V. Rangan (`demo-approver`) | approver | CONFIDENTIAL | quality-assurance |
 
-The Workbench has a one-click example goal for each target. Nothing is scripted behind
-them: the planner sees whatever goal text you submit.
+### Write a report: the workbench
+
+The **Workbench** (`#/work`) is where reports are written: a resource tree on the left,
+tabs and a command line in the middle, and observability, sandbox state and activity on
+the right ([ADR-0008](./docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)).
+
+1. **Ask for the report you want.** As R. Kulkarni, type in the command line:
+   `/report on lathe L-1 covering only its condition and the vendor options`. You can also
+   use the welcome tab, or `/task lathe report` to write a longer request as a file and
+   **Commit** it.
+2. **Watch it work.** The task tab shows the agent cards (click one: goal, current step,
+   completed work, tools, what it waits for), the live journal and the shared state.
+   A fuller request such as "…its condition and workload, what company policy requires
+   today, the options, and a recommendation" is split among helper agents.
+   - `/pause` pauses the task and `/steer agent_1 …` tells one agent something at its
+     next step.
+   - `/note` adds to the shared state.
+   - `/run docs.search {"query": "L-1 runout"}` runs a tool yourself, through the same
+     policy chokepoint.
+3. **Open the report.** It has exactly the sections you asked for, each paragraph cited.
+   *Web search* facts come from the offline reference library
+   ([ADR-0010](./docs/adr/0010-web-search-is-the-offline-reference-library.md)).
+4. **Change it yourself.**
+   - You can edit the title, the summary or any section, add or reorder sections, and
+     click an evidence item to cite it.
+   - **Save as v2** renders and verifies your version. A number you add without a source
+     is flagged, not hidden.
+5. **Or ask for changes.** In **Revise**, type "Add a section on operator training". The
+   agents start from your latest verified version, so your edits stay, and write v3. Every
+   version is kept, can be downloaded as .docx, and names its author in the revision
+   history.
+6. **Ask about the documents.** `/ask the difference in policy 1 between today and last
+   month` compares the two issues of Policy 1 and cites both. `/ask what is agent 2
+   doing?` answers about the work itself.
+
+What the workbench learns from finished work (outcomes, facts and approvers' comments)
+is kept by the memory manager
+([ADR-0009](./docs/adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md)).
+Agents recall it before they plan, and you can read, edit and archive it in the Memory
+tab. It is filtered by department and clearance, like documents.
+
+### The five acceptance targets
+
+The **Task log** (`#/tasks`) has a one-click example goal for each target. Nothing is
+scripted behind them: the planner sees whatever goal text you submit.
 
 ### B: scanned report → approval note (.docx)
 
@@ -205,8 +251,9 @@ target E is never shown there (ADR-0003).
   FastAPI, and hand-written HTML/CSS/JS instead of Vite + React (`services/AGENTS.md`,
   `web/AGENTS.md`).
 - **Deliverables** are .docx and .xlsx. PowerPoint is not built.
-- **Memory** is working memory only. Episodic and semantic memory wait on the Monarch
-  seam (`packages/memory/AGENTS.md`).
+- **Report writing has been walked end to end with the scripted stand-in model**, in a
+  browser. How well the local models follow the section instructions is to be measured
+  on the real card, alongside structured-output conformance.
 - **The M1 measurements on the real card have not been run**: resident-set VRAM, swap
   cost, and structured-output conformance per model. The registry's figures are estimates
   and say so.
@@ -221,7 +268,8 @@ target E is never shown there (ADR-0003).
 
 ## Related repositories
 
-- `AI_WORKBENCH/MONARCH` holds memory. It is consumed as a version-pinned package: two
-  repositories with a dependency relationship, never a code merge.
+- `AI_WORKBENCH/MONARCH` is a local assistant's memory. Citadel implements its memory
+  manager's design in its own Postgres store, with classification and ACL on every memory
+  (ADR-0009). There is no code dependency and no merge.
 - `AI_WORKBENCH/CITADEL` is the prototype: a quarry, not a baseline. `contracts/` was
   worth porting; most of the rest is documented in `AGENTS.md` as failure modes with names.
