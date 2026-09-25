@@ -18,7 +18,7 @@ from typing import Any, Iterator, Mapping, Optional, Sequence
 
 import httpx
 
-from citadel_gateway.provider import ProgressCallback
+from citadel_gateway.provider import ProgressCallback, RuntimeSpellings, normalise_tag
 from citadel_gateway.types import (
     InstalledModel,
     LoadedModel,
@@ -54,6 +54,8 @@ class VLLMProvider:
             transport=transport,
             trust_env=False,
         )
+        # Requests name a model the way /v1/models listed it (see normalise_tag).
+        self._spelling = RuntimeSpellings()
 
     def _request(self, method: str, path: str, body: Optional[Mapping[str, Any]] = None, *, timeout_s: float = 300.0) -> dict[str, Any]:
         try:
@@ -77,7 +79,11 @@ class VLLMProvider:
 
     def installed(self) -> list[InstalledModel]:
         data = self._request("GET", "/v1/models", timeout_s=10.0).get("data") or []
-        return [InstalledModel(tag=str(m["id"])) for m in data if isinstance(m, dict) and "id" in m]
+        served = [str(m["id"]) for m in data if isinstance(m, dict) and "id" in m]
+        self._spelling.remember(served)
+        # The compared form, like every provider's: the router normalises the registry's tag
+        # the same way, so a Hugging Face id in the registry matches the id the server serves.
+        return [InstalledModel(tag=normalise_tag(name)) for name in served]
 
     def loaded(self) -> list[LoadedModel]:
         # Everything a vLLM server serves is resident for the server's lifetime.
@@ -96,7 +102,7 @@ class VLLMProvider:
         timeout_s: float = 300.0,
     ) -> ProviderResponse:
         body: dict[str, Any] = {
-            "model": tag,
+            "model": self._spelling(tag),
             "messages": [{"role": m.role, "content": _content(m)} for m in messages],
             "temperature": temperature,
         }
@@ -135,7 +141,7 @@ class VLLMProvider:
         timeout_s: float = 300.0,
     ) -> Iterator[tuple[str, Optional[Usage]]]:
         body: dict[str, Any] = {
-            "model": tag,
+            "model": self._spelling(tag),
             "messages": [{"role": m.role, "content": _content(m)} for m in messages],
             "temperature": temperature,
             "stream": True,
@@ -168,7 +174,7 @@ class VLLMProvider:
             raise ProviderError(f"vllm stream failed: {exc}") from exc
 
     def embed(self, tag: str, texts: Sequence[str], *, keep_alive: Optional[str] = None) -> tuple[list[list[float]], Usage]:
-        reply = self._request("POST", "/v1/embeddings", {"model": tag, "input": list(texts)})
+        reply = self._request("POST", "/v1/embeddings", {"model": self._spelling(tag), "input": list(texts)})
         data = sorted((d for d in reply.get("data") or [] if isinstance(d, dict)), key=lambda d: int(d.get("index", 0)))
         usage = reply.get("usage") or {}
         return [[float(v) for v in d.get("embedding") or []] for d in data], Usage(int(usage.get("prompt_tokens") or 0))

@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
+import httpx
 import pytest
 
 from citadel_gateway import (
@@ -18,9 +19,11 @@ from citadel_gateway import (
     ProviderError,
     RoutingRequest,
     RuntimeView,
+    normalise_tag,
     route,
 )
 from citadel_gateway.ollama import OllamaProvider
+from citadel_gateway.vllm import VLLMProvider
 from citadel_platform.registry import Registry, load_registry
 from citadel_platform.registry.schema import ModelEntry
 from fake_ollama import FakeOllama, minimal_instance
@@ -283,3 +286,52 @@ def test_an_ambient_proxy_variable_is_never_honoured(fake: FakeOllama, monkeypat
         monkeypatch.setenv(var, "http://127.0.0.1:9")
     tags = {model.tag for model in OllamaProvider(fake.url).installed()}
     assert VISION.tag in tags
+
+
+# -- a model pulled under another letter case -----------------------------------------------
+
+
+def test_tags_are_compared_without_regard_to_letter_case():
+    assert normalise_tag("Gen:4B") == normalise_tag("gen:4b") == "gen:4b"
+    assert normalise_tag("Embed-Text") == "embed-text:latest"
+    assert normalise_tag(" gen:4b ") == "gen:4b"
+
+
+def test_a_model_pulled_under_another_case_is_installed_and_called_by_its_listed_name():
+    """Found on the demonstration machine: Ollama listed the planning model with a capital
+    B in its tag (it had been pulled that way months earlier), the registry spells it with
+    a small b, and every plan step failed with "not installed on the runtime". Ollama
+    answers to either spelling; this fake, like a case-sensitive runtime, answers only to
+    the one it lists -- so the request must use that one."""
+    listed = "Gen:4B"
+    server = FakeOllama({listed} | (ALL_TAGS - {GENERAL.tag, LARGE.tag}), thinking_tags=[listed]).start()
+    try:
+        gateway = Gateway(_registry(), OllamaProvider(server.url))
+        assert "general" not in [m.id for m in gateway.missing_models()]
+        result = gateway.generate(RoutingRequest("plan", ("planning",)), [Message("user", "hi")], schema=SCHEMA)
+        assert result.model_id == "general" and not result.fallback_used
+        chats = [body for path, body in server.requests if path == "/api/chat"]
+        assert [body["model"] for body in chats] == [listed]
+        assert chats[0]["think"] is False  # /api/show found the model under its listed name too
+    finally:
+        server.stop()
+
+
+def test_vllm_served_names_match_the_registry_and_are_requested_as_served():
+    """vLLM serves Hugging Face ids. Compared in the same form as the registry's tags --
+    before, the registry side gained `:latest` and the served side did not, so no
+    hpc-eval model could ever be routed to -- and requested under the served spelling."""
+    sent: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "Org/Big-32B"}]})
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}], "usage": {}})
+
+    provider = VLLMProvider("http://vllm.invalid", transport=httpx.MockTransport(handler))
+    big = _model("big", "org/big-32b", ["planning"], runtime="vllm")
+    view = RuntimeView(reachable=True, installed=frozenset(m.tag for m in provider.installed()), all_resident=True)
+    assert route((big,), RoutingRequest("plan", ("planning",)), view).selected == "big"
+    assert provider.chat(big.tag, [Message("user", "hi")]).text == "ok"
+    assert sent[-1]["model"] == "Org/Big-32B"

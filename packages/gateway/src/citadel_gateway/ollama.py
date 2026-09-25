@@ -19,7 +19,7 @@ from typing import Any, Iterator, Mapping, Optional, Sequence
 
 import httpx
 
-from citadel_gateway.provider import ProgressCallback, normalise_tag
+from citadel_gateway.provider import ProgressCallback, RuntimeSpellings, normalise_tag
 from citadel_gateway.types import (
     InstalledModel,
     LoadedModel,
@@ -54,6 +54,8 @@ class OllamaProvider:
             trust_env=False,
         )
         self._capabilities: dict[str, frozenset[str]] = {}
+        # Requests name a model the way /api/tags listed it (see normalise_tag).
+        self._spelling = RuntimeSpellings()
 
     # -- plumbing ---------------------------------------------------------------
 
@@ -88,7 +90,7 @@ class OllamaProvider:
         key = normalise_tag(tag)
         if key not in self._capabilities:
             try:
-                shown = self._post("/api/show", {"model": tag}, timeout_s=15.0)
+                shown = self._post("/api/show", {"model": self._spelling(tag)}, timeout_s=15.0)
                 caps = shown.get("capabilities")
                 self._capabilities[key] = frozenset(c for c in caps if isinstance(c, str)) if isinstance(caps, list) else frozenset()
             except ProviderError:
@@ -110,8 +112,10 @@ class OllamaProvider:
     def installed(self) -> list[InstalledModel]:
         models = self._get("/api/tags").get("models") or []
         found: list[InstalledModel] = []
+        names: list[str] = []
         for entry in models:
             if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                names.append(entry["name"])
                 found.append(
                     InstalledModel(
                         tag=normalise_tag(entry["name"]),
@@ -119,6 +123,7 @@ class OllamaProvider:
                         digest=entry.get("digest") if isinstance(entry.get("digest"), str) else None,
                     )
                 )
+        self._spelling.remember(names)
         return found
 
     def loaded(self) -> list[LoadedModel]:
@@ -154,7 +159,7 @@ class OllamaProvider:
         if context_window is not None:
             options["num_ctx"] = context_window
         body: dict[str, Any] = {
-            "model": tag,
+            "model": self._spelling(tag),
             "messages": [_message_payload(m) for m in messages],
             "stream": stream,
             "options": options,
@@ -252,7 +257,7 @@ class OllamaProvider:
             raise ProviderError(f"ollama stream failed: {exc}") from exc
 
     def embed(self, tag: str, texts: Sequence[str], *, keep_alive: Optional[str] = None) -> tuple[list[list[float]], Usage]:
-        body: dict[str, Any] = {"model": tag, "input": list(texts)}
+        body: dict[str, Any] = {"model": self._spelling(tag), "input": list(texts)}
         if keep_alive is not None:
             body["keep_alive"] = keep_alive
         try:
@@ -263,7 +268,7 @@ class OllamaProvider:
             # Pre-/api/embed runtimes: one text per call on the legacy endpoint.
             vectors = []
             for text in texts:
-                legacy = self._post("/api/embeddings", {"model": tag, "prompt": text}, timeout_s=120.0)
+                legacy = self._post("/api/embeddings", {"model": self._spelling(tag), "prompt": text}, timeout_s=120.0)
                 vectors.append([float(v) for v in legacy.get("embedding") or []])
             return vectors, Usage()
         raw = reply.get("embeddings") or []
@@ -291,7 +296,7 @@ class OllamaProvider:
     def set_keep_alive(self, tag: str, keep_alive: str) -> None:
         """Load-and-pin (`-1`), or evict (`0`), with an empty generate request -- the
         documented way to change residency without generating anything."""
-        self._post("/api/generate", {"model": tag, "keep_alive": keep_alive}, timeout_s=300.0)
+        self._post("/api/generate", {"model": self._spelling(tag), "keep_alive": keep_alive}, timeout_s=300.0)
 
 
 def _error_text(response: httpx.Response) -> str:

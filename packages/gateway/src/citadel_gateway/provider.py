@@ -9,7 +9,7 @@ degradation rather than working around it.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator, Mapping, Optional, Protocol, Sequence, runtime_checkable
+from typing import Any, Callable, Iterable, Iterator, Mapping, Optional, Protocol, Sequence, runtime_checkable
 
 from citadel_gateway.types import (
     InstalledModel,
@@ -69,8 +69,32 @@ class InferenceProvider(Protocol):
 
 
 def normalise_tag(tag: str) -> str:
-    """Ollama reports an untagged model as `name:latest`; the registry may omit it."""
-    return tag if ":" in tag.split("/")[-1] else f"{tag}:latest"
+    """The form two model names are compared in -- never the form sent to a runtime.
+
+    Ollama reports an untagged model as `name:latest`; the registry may omit it. Ollama
+    also answers to a name in any letter case, but lists a model the way it was pulled:
+    after `ollama pull name:4B`, /api/tags says `name:4B`, and the registry's `name:4b`
+    has to find it. (It did not, once, on the demonstration machine: every plan step
+    failed with "not installed on the runtime" while Ollama had the model.) So the
+    comparison ignores case. A request keeps the runtime's own spelling; see
+    `RuntimeSpellings`."""
+    folded = tag.strip().lower()
+    return folded if ":" in folded.split("/")[-1] else f"{folded}:latest"
 
 
-__all__ = ["InferenceProvider", "ProgressCallback", "normalise_tag"]
+class RuntimeSpellings:
+    """The names a runtime listed, by their compared form: requests go out under the
+    runtime's own spelling, which a case-sensitive runtime needs. A name the runtime has
+    not listed (yet) goes out as given."""
+
+    def __init__(self) -> None:
+        self._by_key: dict[str, str] = {}
+
+    def remember(self, names: Iterable[str]) -> None:
+        self._by_key = {normalise_tag(name): name for name in names}
+
+    def __call__(self, tag: str) -> str:
+        return self._by_key.get(normalise_tag(tag), tag)
+
+
+__all__ = ["InferenceProvider", "ProgressCallback", "RuntimeSpellings", "normalise_tag"]
