@@ -26,7 +26,7 @@ from citadel_gateway.ollama import OllamaProvider
 from citadel_gateway.vllm import VLLMProvider
 from citadel_platform.registry import Registry, load_registry
 from citadel_platform.registry.schema import ModelEntry
-from fake_ollama import FakeOllama, minimal_instance
+from fake_ollama import FakeOllama, keep_alive_error, minimal_instance
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -176,7 +176,7 @@ def test_structured_generation_returns_parsed_data_and_the_routing(fake: FakeOll
     assert result.model_id == "general" and not result.fallback_used
     assert result.routing.selected == "general"
     sent = [body for path, body in fake.requests if path == "/api/chat"][-1]
-    assert sent["format"] == SCHEMA and sent["keep_alive"] == "-1"
+    assert sent["format"] == SCHEMA and sent["keep_alive"] == -1  # a number: see the keep_alive test
 
 
 def test_a_failing_model_falls_back_and_says_so(fake: FakeOllama):
@@ -335,3 +335,18 @@ def test_vllm_served_names_match_the_registry_and_are_requested_as_served():
     assert route((big,), RoutingRequest("plan", ("planning",)), view).selected == "big"
     assert provider.chat(big.tag, [Message("user", "hi")]).text == "ok"
     assert sent[-1]["model"] == "Org/Big-32B"
+
+
+def test_keep_alive_goes_out_in_a_form_ollama_parses(fake: FakeOllama):
+    """Found on the demonstration machine: the registry's keep_alive_resident "-1" went out
+    as the string "-1", which Ollama refuses (400 'time: missing unit in duration "-1"'),
+    so every call to a resident model failed. A bare number now goes out as a number
+    (negative: keep the model loaded), and a duration keeps its unit. The fake parses
+    keep_alive the way Ollama does, so this fails where Ollama would."""
+    gateway = _gateway(fake)
+    gateway.generate(RoutingRequest("act", ACT, preferred_capability="drafting"), [Message("user", "hi")], schema=SCHEMA)
+    gateway.embed(["valve"], classification="INTERNAL")
+    assert sorted(gateway.warm_resident_set()) == ["coder", "general"]
+    sent = {path: body["keep_alive"] for path, body in fake.requests if "keep_alive" in body}
+    assert sent == {"/api/chat": -1, "/api/embed": -1, "/api/generate": -1}
+    assert keep_alive_error("-1") and keep_alive_error("5m") is None and keep_alive_error(-1) is None

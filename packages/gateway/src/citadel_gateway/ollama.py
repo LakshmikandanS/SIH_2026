@@ -14,6 +14,7 @@ runtime is visible in this file.
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
@@ -29,6 +30,21 @@ from citadel_gateway.types import (
     ProviderSupport,
     Usage,
 )
+
+
+_BARE_NUMBER = re.compile(r"-?\d+(\.\d+)?")
+
+
+def _keep_alive_value(keep_alive: str) -> int | float | str:
+    """Ollama reads a JSON number as seconds (negative: keep the model loaded) and a
+    string as a Go duration, which needs a unit. The string "-1" -- the registry's
+    `keep_alive_resident` -- is refused with 400 'time: missing unit in duration "-1"',
+    which on the demonstration machine failed every call to a resident model. So a bare
+    number goes out as a number, and a duration ("5m") as it is."""
+    text = keep_alive.strip()
+    if _BARE_NUMBER.fullmatch(text):
+        return float(text) if "." in text else int(text)
+    return text
 
 
 def _message_payload(message: Message) -> dict[str, Any]:
@@ -167,7 +183,7 @@ class OllamaProvider:
         if schema is not None:
             body["format"] = dict(schema)
         if keep_alive is not None:
-            body["keep_alive"] = keep_alive
+            body["keep_alive"] = _keep_alive_value(keep_alive)
         # Reasoning models spend their budget on hidden deliberation unless told not
         # to; the gateway wants the answer, and structured output wants it clean.
         if "thinking" in self.model_capabilities(tag):
@@ -259,7 +275,7 @@ class OllamaProvider:
     def embed(self, tag: str, texts: Sequence[str], *, keep_alive: Optional[str] = None) -> tuple[list[list[float]], Usage]:
         body: dict[str, Any] = {"model": self._spelling(tag), "input": list(texts)}
         if keep_alive is not None:
-            body["keep_alive"] = keep_alive
+            body["keep_alive"] = _keep_alive_value(keep_alive)
         try:
             reply = self._post("/api/embed", body, timeout_s=300.0)
         except ProviderError as exc:
@@ -296,7 +312,7 @@ class OllamaProvider:
     def set_keep_alive(self, tag: str, keep_alive: str) -> None:
         """Load-and-pin (`-1`), or evict (`0`), with an empty generate request -- the
         documented way to change residency without generating anything."""
-        self._post("/api/generate", {"model": self._spelling(tag), "keep_alive": keep_alive}, timeout_s=300.0)
+        self._post("/api/generate", {"model": self._spelling(tag), "keep_alive": _keep_alive_value(keep_alive)}, timeout_s=300.0)
 
 
 def _error_text(response: httpx.Response) -> str:

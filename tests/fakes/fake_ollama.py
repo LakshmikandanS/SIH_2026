@@ -30,6 +30,24 @@ Brain = Callable[[str, Sequence[Mapping[str, Any]], Optional[Mapping[str, Any]]]
 
 EMBED_DIMENSIONS = 768
 _WORD = re.compile(r"[a-z0-9]+(?:[-./][a-z0-9]+)*")
+_GO_DURATION = re.compile(r"[-+]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|h))+")
+_BARE_NUMBER = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)")
+
+
+def keep_alive_error(value: Any) -> Optional[str]:
+    """How Ollama reads `keep_alive` (api.Duration), mirrored so a test fails where Ollama
+    would: a JSON number is seconds; a string is a Go duration, which needs a unit unless it
+    is "0". The real runtime answers 400 before it looks the model up -- found when the
+    string "-1" failed every call on the demonstration machine."""
+    if value is None or (isinstance(value, (int, float)) and not isinstance(value, bool)):
+        return None
+    if isinstance(value, str):
+        if value == "0" or _GO_DURATION.fullmatch(value):
+            return None
+        if _BARE_NUMBER.fullmatch(value):
+            return f'time: missing unit in duration "{value}"'
+        return f'time: invalid duration "{value}"'
+    return f"Unsupported type: '{type(value).__name__}'"
 
 
 def hash_embedding(text: str, dimensions: int = EMBED_DIMENSIONS) -> list[float]:
@@ -186,6 +204,11 @@ class FakeOllama:
                         yield {"status": "success"}
                     self._stream(progress())
                     return
+                if self.path in ("/api/chat", "/api/generate", "/api/embed") and "keep_alive" in body:
+                    problem = keep_alive_error(body["keep_alive"])
+                    if problem:
+                        self._json(400, {"error": problem})
+                        return
                 if tag not in fake.installed:
                     self._json(404, {"error": f"model '{body.get('model')}' not found, try pulling it first"})
                     return
