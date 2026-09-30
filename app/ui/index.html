@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citadel — Local AI Workbench</title>
+<style>
+  :root{
+    --bg:#1c1e17; --panel:#1c1e17; --line:#d8d6c8; --ink:#eceadd; --dim:#9a9c8c;
+    --ok:#8fbf7f; --deny:#e08a7f; --hold:#e0c07f; --accent:#8fc2d4;
+    --mono:"Consolas","IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:12.5px;line-height:1.5}
+  a{color:var(--accent)}
+  /* box with a label sitting on its top border, like the vision sketch */
+  .box{border:1.5px solid var(--line);border-radius:3px;padding:14px 12px 12px;position:relative;margin-top:12px}
+  .box>.lbl{position:absolute;top:-8px;left:10px;background:var(--bg);padding:0 6px;font-weight:700;letter-spacing:.08em;font-size:11px;text-transform:uppercase}
+  .tree{margin:0;padding:0;list-style:none}
+  .tree li{padding-left:14px;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tree li:before{content:"├─";position:absolute;left:0;color:var(--dim)}
+  .tree li:last-child:before{content:"└─"}
+  .tree .grp{font-weight:700;padding-left:0}
+  .tree .grp:before{content:""}
+  h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.02em}
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1.5px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:20}
+  #who{margin-left:auto;color:var(--dim)}
+  .wrap{display:grid;grid-template-columns:250px minmax(430px,1fr) 300px;gap:14px;padding:14px;align-items:start}
+  @media(max-width:1180px){.wrap{grid-template-columns:1fr}}
+  button{font-family:var(--mono);font-size:12px;padding:5px 11px;background:transparent;color:var(--ink);border:1.5px solid var(--line);border-radius:3px;cursor:pointer}
+  button:hover:not(:disabled){background:var(--line);color:var(--bg)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.go{border-color:var(--ok);color:var(--ok)} button.go:hover:not(:disabled){background:var(--ok);color:var(--bg)}
+  button.no{border-color:var(--deny);color:var(--deny)} button.no:hover:not(:disabled){background:var(--deny);color:var(--bg)}
+  input,textarea,select{font-family:var(--mono);font-size:12.5px;background:transparent;color:var(--ink);border:1.5px solid var(--line);border-radius:3px;padding:6px 8px;width:100%}
+  textarea{resize:vertical;min-height:150px;line-height:1.6}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:-1px}
+  .tab{border:1.5px solid var(--line);border-bottom:none;border-radius:3px 3px 0 0;padding:4px 12px;cursor:pointer;font-size:11.5px;background:var(--bg);color:var(--dim)}
+  .tab.on{color:var(--ink);font-weight:700}
+  .tabbody{border:1.5px solid var(--line);border-radius:0 3px 3px 3px;padding:14px;min-height:300px}
+  .cli{background:#15170f;border:1.5px solid var(--line);border-radius:3px;padding:10px;height:190px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
+  .cli .p{color:var(--ok)}
+  .cliin{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .cliin span{color:var(--ok)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .muted{color:var(--dim)}
+  .act{border-bottom:1px dotted #3a3d31;padding:2px 0;display:flex;gap:8px}
+  .act .t{color:var(--dim);flex:none}
+  .st{border:1.5px solid currentColor;border-radius:999px;padding:0 8px;font-size:11px}
+  .s-ok{color:var(--ok)} .s-bad{color:var(--deny)} .s-wait{color:var(--hold)} .s-run{color:var(--accent)}
+  .ev-deny{color:var(--deny)} .ev-exec{color:var(--ok)} .ev-pol{color:var(--accent)} .ev-rel{color:var(--ok);font-weight:700}
+  .hidden{display:none!important}
+  .rep{background:#15170f;border:1.5px solid var(--line);border-radius:3px;padding:14px;white-space:pre-wrap;word-break:break-word;max-height:460px;overflow-y:auto;line-height:1.65}
+  .scroll{max-height:250px;overflow-y:auto}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
+  .on-d{background:var(--ok)} .off-d{background:var(--deny)}
+  .spin{display:inline-block;width:10px;height:10px;border:2px solid #3a3d31;border-top-color:var(--ink);border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px;margin-right:5px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .toast{border:1.5px solid;border-radius:3px;padding:8px 11px;margin:10px 14px 0}
+  .t-e{border-color:var(--deny);color:var(--deny)} .t-o{border-color:var(--ok);color:var(--ok)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CITADEL</h1>
+  <span class="muted">Local AI Workbench &mdash; privacy preserving, on-premise</span>
+  <span id="who" class="muted">not signed in</span>
+  <button id="logoutBtn" class="hidden">sign out</button>
+</header>
+
+<div id="toast"></div>
+
+<!-- ============ SIGN IN (hidden once authenticated) ============ -->
+<div id="loginWrap" style="padding:14px;max-width:640px">
+  <div class="box"><span class="lbl">Sign in</span>
+    <p class="muted" style="margin:0 0 12px">Identity comes from a verified session JWT &mdash; never a request body. Roles are enforced: the engineer who submits work cannot release it.</p>
+
+    <div class="muted" style="margin-bottom:6px">sign in as &mdash; one click, fills both fields</div>
+    <div class="row" style="margin-bottom:14px">
+      <button class="persona go" data-u="j.rao"   data-p="engineer-pw">Engineer &middot; j.rao</button>
+      <button class="persona go" data-u="a.singh" data-p="approver-pw">Approver &middot; a.singh</button>
+      <button class="persona go" data-u="s.mehta" data-p="admin-pw">Admin &middot; s.mehta</button>
+    </div>
+
+    <div class="row" style="margin-bottom:10px">
+      <div style="flex:1;min-width:150px"><div class="muted">username</div><input id="u" value="j.rao"></div>
+      <div style="flex:1;min-width:150px"><div class="muted">password</div><input id="p" type="password" value="engineer-pw"></div>
+    </div>
+    <div class="row"><button id="loginBtn">sign in</button></div>
+    <ul class="tree" style="margin-top:12px;color:var(--dim)">
+      <li>j.rao &mdash; engineer, maintenance dept, submits tasks</li>
+      <li>a.singh &mdash; approver, maintenance dept, releases artifacts</li>
+      <li>s.mehta &mdash; admin, security dept, kill-switch</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ WORKBENCH ============ -->
+<div class="wrap hidden" id="bench">
+
+  <!-- ---------- LEFT ---------- -->
+  <div>
+    <div class="box"><span class="lbl">Agent</span>
+      <ul class="tree" id="agentTree">
+        <li class="grp muted">no task running</li>
+      </ul>
+    </div>
+
+    <div class="box"><span class="lbl">Resources / DB / Files</span>
+      <div class="muted" style="margin-bottom:6px;font-size:11px" id="docsWho"></div>
+      <ul class="tree" id="docTree"><li class="muted">loading…</li></ul>
+      <div class="muted" style="margin-top:8px;font-size:11px">Click a file to open it. Access uses the same ACL rule as <b>rag.search</b> &mdash; nothing you cannot retrieve is readable here.</div>
+    </div>
+
+    <div class="box"><span class="lbl">Tools</span>
+      <ul class="tree" id="toolTree"></ul>
+      <div class="muted" style="margin-top:10px;font-size:11px">A disabled tool is denied on the next call even with a valid, unexpired capability token.</div>
+      <div class="row" style="margin-top:8px">
+        <select id="tool" style="flex:1">
+          <option>python.execute</option><option>rag.search</option><option>generate_report</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="disableBtn" class="no">disable</button>
+      </div>
+      <div class="muted" style="margin-top:8px;font-size:11px">
+        <b>One-way.</b> Section 6.8 names exactly one emergency control, so there is no
+        re-enable endpoint. The flag lives in the server process &mdash; restart it to clear.
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- CENTRE ---------- -->
+  <div>
+    <div class="tabs">
+      <div class="tab on" data-t="task">task.prompt</div>
+      <div class="tab" data-t="report">report.md</div>
+      <div class="tab" data-t="trace">trace</div>
+      <div class="tab" data-t="file">file</div>
+    </div>
+
+    <div class="tabbody">
+      <!-- TASK -->
+      <div id="pane-task">
+        <div class="muted" style="margin-bottom:8px">Describe the task. It runs synchronously: plan &rarr; agent loop &rarr; tool calls through the Tool Gateway. A real run takes 20&ndash;40s.</div>
+        <textarea id="text">Using the available internal maintenance documents, identify the recent maintenance history of Pump P-101 and generate a short maintenance summary report.</textarea>
+        <div class="row" style="margin-top:10px">
+          <div style="width:190px"><div class="muted">classification</div>
+            <select id="cls"><option>CONFIDENTIAL</option><option>INTERNAL</option><option>PUBLIC</option></select>
+          </div>
+          <button id="taskBtn" class="go" style="align-self:flex-end">commit &amp; run</button>
+          <button id="denyBtn" style="align-self:flex-end">run denial-path task</button>
+        </div>
+
+        <div class="box hidden" id="resBox" style="margin-top:18px"><span class="lbl">Task</span>
+          <div class="row" style="margin-bottom:8px">
+            <b id="tid"></b> <span id="tstat" class="st"></span>
+          </div>
+          <div id="treason" class="muted"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="refreshBtn">refresh</button>
+            <button id="viewRepBtn">view report</button>
+            <button id="approveBtn" class="go hidden">approve &amp; release</button>
+            <button id="rejectBtn" class="no hidden">reject</button>
+          </div>
+          <div class="hidden" id="cmtWrap" style="margin-top:8px">
+            <div class="muted">rejection comment</div><input id="cmt" placeholder="what needs fixing?">
+          </div>
+        </div>
+      </div>
+
+      <!-- REPORT -->
+      <div id="pane-report" class="hidden">
+        <div class="row" style="margin-bottom:10px">
+          <b>Generated artifact</b>
+          <span id="repMeta" class="muted"></span>
+          <button id="repRefresh" style="margin-left:auto">reload</button>
+        </div>
+        <div class="rep" id="repBody"><span class="muted">No artifact yet. Run a task, then open this tab.</span></div>
+      </div>
+
+      <!-- FILE -->
+      <div id="pane-file" class="hidden">
+        <div class="row" style="margin-bottom:10px">
+          <b id="fileName">no file open</b>
+          <span id="fileMeta" class="muted"></span>
+        </div>
+        <div class="rep" id="fileBody"><span class="muted">Click a file in Resources / DB / Files.</span></div>
+      </div>
+
+      <!-- TRACE -->
+      <div id="pane-trace" class="hidden">
+        <div class="muted" style="margin-bottom:8px">Every ALLOW, DENY and release, hash-chained. Denials are first-class outcomes, not errors.</div>
+        <div class="scroll" style="max-height:430px" id="traceBody"><span class="muted">No trace yet.</span></div>
+      </div>
+    </div>
+
+    <!-- CLI -->
+    <div class="box" style="margin-top:14px"><span class="lbl">CLI</span>
+      <div class="cli" id="cliOut"><span class="muted">Type <b>help</b> for commands. This is the same API the `citadel` shell client uses.</span></div>
+      <div class="cliin"><span>&gt;&gt;&gt;</span><input id="cliIn" placeholder="/task report on lathe" autocomplete="off"></div>
+    </div>
+  </div>
+
+  <!-- ---------- RIGHT ---------- -->
+  <div>
+    <div class="box"><span class="lbl">Observability / Metrics</span>
+      <ul class="tree" id="obsTree">
+        <li class="muted">no run yet</li>
+      </ul>
+    </div>
+
+    <div class="box"><span class="lbl">Environment / Sandbox state</span>
+      <ul class="tree" id="sandTree">
+        <li class="muted">idle</li>
+      </ul>
+    </div>
+
+    <div class="box"><span class="lbl">Activity</span>
+      <div class="scroll" id="activity"><span class="muted">nothing yet</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+let TOKEN=localStorage.getItem('c_tok')||null, USER=localStorage.getItem('c_usr')||null;
+let TASK=null, ARTIFACT=null, DISABLED={};
+
+/* ---------- session ---------- */
+function paint(){
+  const on=!!TOKEN;
+  $('#who').textContent = on?`signed in as ${USER}`:'not signed in';
+  $('#loginWrap').classList.toggle('hidden',on);
+  $('#bench').classList.toggle('hidden',!on);
+  $('#logoutBtn').classList.toggle('hidden',!on);
+  renderTools();
+  if(on) loadDocs();
+}
+function toast(m,k='e'){ $('#toast').innerHTML=`<div class="toast ${k==='o'?'t-o':'t-e'}">${m}</div>`; if(k==='o') setTimeout(()=>$('#toast').innerHTML='',4000); }
+function clearToast(){ $('#toast').innerHTML=''; }
+
+async function api(path,opts={}){
+  const h=Object.assign({'Content-Type':'application/json'},opts.headers||{});
+  if(TOKEN) h['Authorization']='Bearer '+TOKEN;
+  const r=await fetch(path,Object.assign({},opts,{headers:h}));
+  const b=await r.json().catch(()=>({}));
+  if(!r.ok){
+    const d=b.detail&&b.detail.error?b.detail.error:null;
+    // The session secret is per-process by design when CITADEL_SESSION_SECRET
+    // is unset, so a server restart legitimately invalidates a cached token.
+    // Drop it and show the sign-in form rather than looping on 401s.
+    if(r.status===401 && TOKEN){
+      TOKEN=USER=null; localStorage.removeItem('c_tok'); localStorage.removeItem('c_usr'); paint();
+      toast('Session expired (the server restarted). Sign in again.');
+    }
+    throw new Error(d?`${d.code}: ${d.message}`:(b.detail||`HTTP ${r.status}`));
+  }
+  return b;
+}
+function busy(b,on,l){ b.disabled=on; if(on){b.dataset.o=b.textContent;b.innerHTML=`<span class="spin"></span>${l||'…'}`;} else if(b.dataset.o){b.textContent=b.dataset.o;} }
+
+$('#loginBtn').onclick=async()=>{ clearToast(); const b=$('#loginBtn'); busy(b,true,'signing in');
+  try{ const r=await api('/login',{method:'POST',body:JSON.stringify({username:$('#u').value,password:$('#p').value})});
+    TOKEN=r.access_token; USER=$('#u').value; localStorage.setItem('c_tok',TOKEN); localStorage.setItem('c_usr',USER);
+    paint(); cli(`signed in as ${USER}`,'ok');
+  }catch(e){ toast(e.message);} finally{ busy(b,false);} };
+$('#logoutBtn').onclick=()=>{ TOKEN=USER=null; localStorage.removeItem('c_tok'); localStorage.removeItem('c_usr'); paint(); };
+
+// One click fills BOTH fields and signs in. The previous form kept a stale
+// password when only the username was changed, which made every persona
+// except the default look like it "could not sign in".
+$$('.persona').forEach(b=>b.onclick=()=>{
+  $('#u').value=b.dataset.u; $('#p').value=b.dataset.p; $('#loginBtn').click();
+});
+
+/* ---------- tabs ---------- */
+$$('.tab').forEach(t=>t.onclick=()=>{
+  $$('.tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
+  ['task','report','trace','file'].forEach(n=>$('#pane-'+n).classList.toggle('hidden', n!==t.dataset.t));
+  if(t.dataset.t==='report') loadReport();
+});
+function showTab(n){ $$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===n));
+  ['task','report','trace','file'].forEach(m=>$('#pane-'+m).classList.toggle('hidden',m!==n)); }
+
+/* ---------- documents ---------- */
+async function loadDocs(){
+  if(!TOKEN) return;
+  try{
+    const d=await api('/documents');
+    $('#docsWho').textContent=`you: ${d.requester.department} · ${d.requester.clearance}`;
+    const byDept={};
+    d.documents.forEach(x=>(byDept[x.department]=byDept[x.department]||[]).push(x));
+    let html='';
+    for(const dept of Object.keys(byDept).sort()){
+      html+=`<li class="grp" style="margin-top:6px">${dept.toUpperCase()}_DEPT</li>`;
+      byDept[dept].forEach(x=>{
+        const cls = x.readable?'':'s-bad';
+        const mark = x.readable
+          ? `<span class="muted">${x.classification}</span>`
+          : `<span class="s-bad">withheld</span>`;
+        html+=`<li><a href="#" class="doc ${cls}" data-id="${x.document_id}" title="${x.readable?'open':x.reason}">${x.document_id}</a> · ${mark}</li>`;
+      });
+    }
+    html+=`<li class="grp" style="margin-top:6px">REJECTED AT INGEST</li>
+           <li class="muted" title="no .meta.json sidecar — section 6.9 rejects it outright">pump_p102_notes · no ACL sidecar</li>`;
+    $('#docTree').innerHTML=html;
+    $$('.doc').forEach(a=>a.onclick=e=>{e.preventDefault();openDoc(a.dataset.id);});
+  }catch(e){ $('#docTree').innerHTML=`<li class="s-bad">${e.message}</li>`; }
+}
+
+async function openDoc(id){
+  showTab('file');
+  $('#fileName').textContent=id; $('#fileMeta').textContent=''; $('#fileBody').textContent='loading…';
+  try{
+    const d=await api(`/documents/${id}`);
+    $('#fileMeta').textContent=`${d.classification} · acl:[${d.acl.join(', ')}] · ${d.department} · ${d.chunks} chunks`;
+    $('#fileBody').textContent=d.content||d.read_error||'(empty)';
+    cli(`opened ${id} (${d.classification})`,'ok');
+  }catch(e){
+    $('#fileMeta').textContent='';
+    $('#fileBody').innerHTML=`<span class="s-bad">${e.message}</span>
+      <div class="muted" style="margin-top:10px">This is the ACL rule doing its job: the same check <b>rag.search</b> applies inside the Data Plane, applied to you.</div>`;
+    cli(`${id}: ${e.message}`,'bad');
+  }
+}
+
+/* ---------- tools ---------- */
+function renderTools(){
+  const t=$('#toolTree'); if(!t) return;
+  const tools=['rag.search','python.execute','generate_report'];
+  t.innerHTML = `<li class="grp">AVAILABLE</li>` + tools.map(x=>{
+    const off=DISABLED[x];
+    return `<li><span class="dot ${off?'off-d':'on-d'}"></span>${x}${off?' <span class="s-bad">DISABLED</span>':''}</li>`;
+  }).join('');
+}
+
+/* ---------- run a task ---------- */
+async function runTask(text){
+  clearToast(); const b=$('#taskBtn'); busy(b,true,'planning & executing'); $('#denyBtn').disabled=true;
+  cli(`/task ${text.slice(0,60)}${text.length>60?'…':''}`);
+  try{
+    const r=await api('/task',{method:'POST',body:JSON.stringify({text,classification:$('#cls').value})});
+    TASK=r.task_id; ARTIFACT=null;
+    cli(`task_id: ${r.task_id}  status: ${r.status}`, r.status==='FAILED'?'bad':'ok');
+    showResult(r); await refreshAll();
+  }catch(e){ toast(e.message); cli(e.message,'bad'); }
+  finally{ busy(b,false); $('#denyBtn').disabled=false; }
+}
+$('#taskBtn').onclick=()=>runTask($('#text').value);
+$('#denyBtn').onclick=()=>runTask('Summarise the Q3 finance report and its headcount figures.');
+
+function sClass(s){ return s==='COMPLETED'?'s-ok':s==='FAILED'?'s-bad':s==='WAITING_FOR_APPROVAL'?'s-wait':'s-run'; }
+function showResult(r){
+  const st=r.status||r.task_status;
+  $('#resBox').classList.remove('hidden');
+  $('#tid').textContent=r.task_id||TASK;
+  $('#tstat').textContent=st; $('#tstat').className='st '+sClass(st);
+  $('#treason').textContent=r.reason||'';
+  const w=st==='WAITING_FOR_APPROVAL';
+  $('#approveBtn').classList.toggle('hidden',!w);
+  $('#rejectBtn').classList.toggle('hidden',!w);
+  $('#cmtWrap').classList.toggle('hidden',!w);
+}
+$('#refreshBtn').onclick=async()=>{ if(!TASK)return;
+  try{ const r=await api(`/tasks/${TASK}`); showResult(Object.assign({task_id:TASK},r)); await refreshAll(); }catch(e){toast(e.message);} };
+
+/* ---------- trace / panels ---------- */
+async function refreshAll(){
+  if(!TASK) return;
+  let t; try{ t=await api(`/tasks/${TASK}/trace`);}catch(e){ return; }
+  const ev=t.events;
+
+  // trace tab
+  $('#traceBody').innerHTML = ev.map(e=>{
+    const ty=e.event_type; const p=e.payload||{};
+    let c = ty==='TOOL_DENIED'?'ev-deny' : ty==='TOOL_EXECUTED'?'ev-exec'
+          : (ty==='ARTIFACT_RELEASED'||ty==='APPROVAL_GRANTED')?'ev-rel'
+          : ty==='POLICY_DECISION'?'ev-pol':'';
+    let d=[];
+    if(p.decision) d.push('decision='+p.decision);
+    if(p.tool) d.push(p.tool);
+    if(p.reason) d.push(p.reason);
+    if(p.filtered_documents&&p.filtered_documents.length) d.push('filtered: '+p.filtered_documents.map(x=>x.document_id||x).join(', '));
+    return `<div class="act"><span class="t">${String(e.seq).padStart(2,'0')}</span><span class="${c}">${ty}</span><span class="muted">${d.join(' · ')}</span></div>`;
+  }).join('');
+
+  // activity (newest last, like the sketch)
+  $('#activity').innerHTML = ev.slice(-14).map(e=>{
+    const hhmm=new Date(e.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<div class="act"><span class="t">${hhmm}</span><span>${e.event_type}</span></div>`;
+  }).join('');
+
+  // observability counts
+  const c={}; ev.forEach(e=>c[e.event_type]=(c[e.event_type]||0)+1);
+  const denied=c['TOOL_DENIED']||0, exec=c['TOOL_EXECUTED']||0;
+  $('#obsTree').innerHTML=`
+    <li class="grp">CHAIN</li><li>${ev.length} events &middot; <span class="s-ok">hash-linked</span></li>
+    <li class="grp" style="margin-top:6px">TOOL CALLS</li>
+    <li><span class="s-ok">${exec} executed</span></li>
+    <li><span class="${denied?'s-bad':'muted'}">${denied} denied</span></li>
+    <li class="grp" style="margin-top:6px">POLICY</li>
+    <li>${c['POLICY_DECISION']||0} decisions</li>
+    <li>${c['CAPABILITY_CHECKED']||0} capability checks</li>
+    <li class="grp" style="margin-top:6px">EVIDENCE</li>
+    <li>${c['EVIDENCE_RETRIEVED']||0} retrievals</li>`;
+
+  // sandbox tree
+  const art=ev.filter(e=>e.event_type==='ARTIFACT_CREATED').pop();
+  if(art&&art.payload) ARTIFACT=art.payload.artifact_id;
+  const appr=ev.filter(e=>e.event_type==='APPROVAL_REQUESTED').pop();
+  $('#sandTree').innerHTML=`
+    <li class="grp">TASK</li><li>${TASK}</li>
+    <li class="grp" style="margin-top:6px">ARTIFACTS</li>
+    <li>${ARTIFACT||'<span class="muted">none</span>'}</li>
+    <li>${c['ARTIFACT_VERIFIED']?'<span class="s-ok">verified 5/5</span>':'<span class="muted">not verified</span>'}</li>
+    <li>${c['ARTIFACT_RELEASED']?'<span class="s-ok">RELEASED</span>':'<span class="muted">not released</span>'}</li>
+    <li class="grp" style="margin-top:6px">APPROVAL</li>
+    <li>${appr&&appr.payload?appr.payload.approval_id:'<span class="muted">none</span>'}</li>`;
+
+  // agent panel
+  const plan=ev.filter(e=>e.event_type==='PLAN_CREATED').pop();
+  const acts=ev.filter(e=>e.event_type==='ACTION_REQUESTED');
+  const last=acts.length?acts[acts.length-1]:null;
+  const agentId=(ev.find(e=>e.event_type==='AGENT_STARTED')||{}).actor_id||'-';
+  $('#agentTree').innerHTML=`
+    <li class="grp">GOAL</li><li>${($('#text').value||'').slice(0,42)}…</li>
+    <li class="grp" style="margin-top:6px">AGENT</li><li>${agentId}</li>
+    <li class="grp" style="margin-top:6px">PLAN</li>
+    <li>${plan&&plan.payload&&plan.payload.steps?plan.payload.steps.length:'-'} steps</li>
+    <li class="grp" style="margin-top:6px">LAST ACTION</li>
+    <li>${last&&last.payload?(last.payload.action||last.payload.tool||'-'):'-'}</li>
+    <li class="grp" style="margin-top:6px">TOOL CALLS</li>
+    <li><span class="s-ok">${exec} ok</span> / <span class="${denied?'s-bad':'muted'}">${denied} denied</span></li>`;
+}
+
+/* ---------- report ---------- */
+async function loadReport(){
+  if(!ARTIFACT){ await refreshAll(); }
+  if(!ARTIFACT){ $('#repBody').innerHTML='<span class="muted">No artifact produced yet. Run a task that reaches generate_report.</span>'; $('#repMeta').textContent=''; return; }
+  try{
+    const a=await api(`/artifacts/${ARTIFACT}`);
+    $('#repMeta').textContent=`${a.artifact_id} · ${a.status} · ${a.classification} · sha256 ${(a.hash||'').slice(0,12)}… · ${a.provenance.length} sources`;
+    $('#repBody').textContent = a.content || a.read_error || '(empty)';
+  }catch(e){ $('#repBody').innerHTML=`<span class="s-bad">${e.message}</span>`; $('#repMeta').textContent=''; }
+}
+$('#repRefresh').onclick=loadReport;
+$('#viewRepBtn').onclick=()=>{ showTab('report'); loadReport(); };
+
+/* ---------- approval ---------- */
+async function approvalId(){
+  const t=await api(`/tasks/${TASK}/trace`);
+  for(const e of t.events) if(e.event_type==='APPROVAL_REQUESTED'&&e.payload&&e.payload.approval_id) return e.payload.approval_id;
+  throw new Error('no APPROVAL_REQUESTED event yet');
+}
+async function decide(d,btn){ clearToast(); busy(btn,true,'submitting');
+  try{ const id=await approvalId();
+    const r=await api(`/approvals/${id}/decision`,{method:'POST',body:JSON.stringify({decision:d,comment:$('#cmt').value||null})});
+    showResult(Object.assign({task_id:r.task_id,status:r.task_status},r));
+    cli(`${d} → artifact=${r.artifact_status||'-'} task=${r.task_status}`,'ok');
+    await refreshAll(); if(d==='APPROVED'){ showTab('report'); loadReport(); }
+  }catch(e){ toast(e.message); cli(e.message,'bad'); } finally{ busy(btn,false);} }
+$('#approveBtn').onclick=e=>decide('APPROVED',e.target);
+$('#rejectBtn').onclick=e=>decide('REJECTED',e.target);
+
+/* ---------- kill switch ---------- */
+// Disable-only, on purpose: section 6.8 names exactly one control and the
+// server exposes no re-enable. An earlier version of this panel sent
+// {disabled:false} and reported success -- the endpoint ignored it and
+// disabled anyway, so the UI was reporting something that had not happened.
+async function disableTool(btn){ clearToast(); busy(btn,true,'applying');
+  const name=$('#tool').value;
+  try{ const r=await api(`/admin/tools/${name}/disable`,{method:'POST',body:JSON.stringify({})});
+    DISABLED[name]=r.disabled; renderTools();
+    cli(`admin disable-tool ${name} → DISABLED${r.previously_disabled?' (already was)':''}`,'ok');
+    if(!r.known_tool) cli(`  note: '${name}' is not a registered tool name`,'bad');
+  }catch(e){ toast(e.message); cli(e.message,'bad'); } finally{ busy(btn,false);} }
+$('#disableBtn').onclick=e=>disableTool(e.target);
+
+/* ---------- in-browser CLI ---------- */
+function cli(line,kind){
+  const c=kind==='bad'?'ev-deny':kind==='ok'?'ev-exec':'';
+  $('#cliOut').innerHTML += `<div class="${c}">${line.replace(/</g,'&lt;')}</div>`;
+  $('#cliOut').scrollTop=$('#cliOut').scrollHeight;
+}
+function echo(cmd){ $('#cliOut').innerHTML+=`<div><span class="p">&gt;&gt;&gt;</span> ${cmd.replace(/</g,'&lt;')}</div>`; }
+
+const HELP=`commands
+  /task <text>            create and run a task
+  /status [task_id]       task status
+  /trace [task_id]        event trace
+  /report [artifact_id]   print the generated report
+  /files                  list the corpus, with what you may read
+  /open <document_id>     open a document (ACL enforced)
+  /approve [task_id]      approve and release
+  /reject <comment>       reject, triggers the one bounded revision
+  admin disable-tool <t>  kill-switch a tool (one-way; restart to clear)
+  clear                   clear this pane`;
+
+$('#cliIn').addEventListener('keydown',async e=>{
+  if(e.key!=='Enter') return;
+  const raw=e.target.value.trim(); if(!raw) return;
+  e.target.value=''; echo(raw);
+  const [cmd,...rest]=raw.split(/\s+/); const arg=rest.join(' ');
+  try{
+    if(cmd==='help'){ cli(HELP); }
+    else if(cmd==='clear'){ $('#cliOut').innerHTML=''; }
+    else if(cmd==='/task'){ if(!arg) return cli('usage: /task <text>','bad'); $('#text').value=arg; await runTask(arg); }
+    else if(cmd==='/status'){ const id=arg||TASK; if(!id) return cli('no task','bad');
+      const r=await api(`/tasks/${id}`); cli(`${id}  ${r.status}  ${r.classification}`); }
+    else if(cmd==='/trace'){ const id=arg||TASK; if(!id) return cli('no task','bad');
+      const t=await api(`/tasks/${id}/trace`); t.events.forEach(x=>cli(`  ${String(x.seq).padStart(2,'0')} ${x.event_type}`, x.event_type==='TOOL_DENIED'?'bad':null)); }
+    else if(cmd==='/report'){ const id=arg||ARTIFACT; if(!id) return cli('no artifact','bad');
+      const a=await api(`/artifacts/${id}`);
+      ARTIFACT=a.artifact_id;               // so the report pane resolves it too
+      cli(`--- ${a.artifact_id} (${a.status}, ${a.classification}) ---`); cli(a.content||'(empty)');
+      showTab('report'); await loadReport(); }
+    else if(cmd==='/files'){ const d=await api('/documents');
+      cli(`you: ${d.requester.department} · ${d.requester.clearance}`);
+      d.documents.forEach(x=>cli(`  ${x.readable?'[ok] ':'[--] '}${x.document_id}  ${x.classification}  acl:[${x.acl.join(',')}]${x.readable?'':'  '+x.reason}`, x.readable?null:'bad'));
+      await loadDocs(); }
+    else if(cmd==='/open'){ if(!arg) return cli('usage: /open <document_id>','bad'); await openDoc(arg); }
+    else if(cmd==='/approve'){ if(arg) TASK=arg; await decide('APPROVED',$('#approveBtn')); }
+    else if(cmd==='/reject'){ $('#cmt').value=arg; await decide('REJECTED',$('#rejectBtn')); }
+    else if(cmd==='admin'){
+      if(/^admin\s+enable-tool/.test(raw))
+        return cli('there is no enable-tool: section 6.8 names one control. Restart the server to clear the flag.','bad');
+      const m=raw.match(/^admin\s+disable-tool\s+(\S+)/);
+      if(!m) return cli('usage: admin disable-tool <tool>','bad');
+      $('#tool').value=m[1]; await disableTool($('#disableBtn'));
+    }
+    else cli(`unknown command: ${cmd} — try "help"`,'bad');
+  }catch(err){ cli(err.message,'bad'); }
+});
+
+paint();
+</script>
+</body>
+</html>

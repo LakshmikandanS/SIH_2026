@@ -1,0 +1,61 @@
+name: CI
+
+# What this can and cannot prove, stated up front so a green tick is not
+# mistaken for more than it is:
+#
+#   * Docker IS available on ubuntu-latest, so the isolated execution zone's
+#     tests -- including section 6.13's no-network proof -- run for real here.
+#   * Ollama is NOT available, so the handful of live-model tests skip cleanly.
+#     They are marked to skip with a reason rather than fail, so read the skip
+#     list in the summary step below before trusting a green run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Confirm the Docker daemon is reachable
+        run: |
+          docker version
+          docker pull python:3.12-slim
+
+      - name: Pre-flight — the trusted zone must not import docker
+        # The single most important structural invariant in the repo (design
+        # doc section 2). Checked here too so a violation fails fast and
+        # loudly, before the suite's own slower AST check gets to it.
+        run: |
+          if grep -rn --include=*.py -E '^\s*(import docker|from docker)' app/; then
+            echo "::error::app/ imports the docker package — the trusted zone must hold no Docker socket"
+            exit 1
+          fi
+          echo "ok: app/ contains no docker import"
+
+      - name: Run the test suite
+        run: pytest tests/ -q -rs
+
+      - name: Summarise skips
+        if: always()
+        run: |
+          echo "Tests skipped above are environment-gated (Ollama is not installed on"
+          echo "this runner). Docker-dependent tests, including the no-network proof,"
+          echo "ran for real."

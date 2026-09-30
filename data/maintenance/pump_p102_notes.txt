@@ -1,0 +1,13 @@
+PUMP P-102 — FIELD NOTES (UNFILED)
+
+Loose notes captured during rounds. Not yet reviewed, not yet
+classified, and deliberately shipped WITHOUT a .meta.json sidecar.
+
+This file is a test fixture. Design doc section 6.9 requires that
+ingestion reject any document lacking a sidecar outright -- no
+default classification, no inferred ACL. If this document is ever
+retrievable through rag.search, ingestion has a bug.
+
+2026-05-02  Coupling guard rattle reported by operator, not yet
+            investigated. Possible loose fastener.
+2026-05-19  Suction strainer differential trending up slowly.

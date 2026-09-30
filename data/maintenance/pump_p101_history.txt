@@ -1,0 +1,55 @@
+PUMP P-101 — MAINTENANCE HISTORY
+Asset ID: PMP-P101
+Location: Plant 2, Cooling Loop B
+Manufacturer: Ingersoll Fluid Systems, Model CF-4400
+Commissioned: 2019-03-11
+
+--------------------------------------------------------------------
+SERVICE RECORD
+--------------------------------------------------------------------
+
+2026-06-14  SCHEDULED SERVICE — 2000-hour interval
+    Technician: R. Okafor (BADGE-4471)
+    Replaced mechanical seal (P/N 44-2201) and both bearing sets.
+    Vibration measured 2.1 mm/s RMS after reassembly, within the
+    4.5 mm/s alarm threshold. Suction pressure nominal at 3.4 bar.
+    Outcome: RETURNED TO SERVICE.
+
+2026-02-02  UNSCHEDULED REPAIR — seal weep
+    Technician: R. Okafor (BADGE-4471)
+    Operator reported visible weep at the seal face during morning
+    rounds. Flush plan 11 line found partially occluded; line cleared
+    and seal faces lapped. No impeller damage observed.
+    Downtime: 6.5 hours.
+    Outcome: RETURNED TO SERVICE.
+
+2025-11-19  SCHEDULED SERVICE — 2000-hour interval
+    Technician: M. Lindqvist (BADGE-3902)
+    Bearing grease replaced, coupling alignment verified to 0.05 mm.
+    Motor current draw steady at 41.2 A under full load.
+    Outcome: RETURNED TO SERVICE.
+
+2025-07-30  CONDITION ALERT — elevated vibration
+    Technician: M. Lindqvist (BADGE-3902)
+    Vibration trended from 2.4 to 3.8 mm/s RMS over eleven days.
+    Root cause traced to a loosened baseplate bolt at position 3.
+    Torqued to specification; vibration returned to 2.3 mm/s RMS.
+    Outcome: RETURNED TO SERVICE.
+
+2025-04-08  SCHEDULED SERVICE — 2000-hour interval
+    Technician: R. Okafor (BADGE-4471)
+    Routine inspection, wear ring clearance measured at 0.42 mm
+    against a 0.55 mm replacement limit.
+    Outcome: RETURNED TO SERVICE.
+
+--------------------------------------------------------------------
+STANDING NOTES
+--------------------------------------------------------------------
+
+The 2026-02-02 seal weep is the second flush-line occlusion recorded
+on this asset since commissioning. Reliability engineering has flagged
+the flush plan for review at the next turnaround.
+
+Next scheduled service is due at the 2000-hour interval following
+2026-06-14, or upon vibration exceeding 4.5 mm/s RMS, whichever
+occurs first.

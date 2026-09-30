@@ -1,280 +1,324 @@
 # Citadel
 
-A sovereign, air-gapped agentic AI workbench for confidential industrial work.
+**A sovereign, on-premise agentic AI workbench for confidential industrial work.**
 
-Refineries, PSUs, defence-linked manufacturers and government offices produce a lot of
-routine but sensitive knowledge work: approval notes, engineering calculations, internal
-tooling, reviews of scanned drawings and inspection reports. None of it can go to a cloud
-assistant. Citadel runs entirely on the organisation's own hardware. It produces real
-deliverables rather than chat replies, and it proves that nothing left the building.
+Refineries, PSUs, defence-linked manufacturers and government offices generate a lot of routine
+but sensitive knowledge work — approval notes, engineering calculations, inspection reports,
+P&IDs. None of it can go to a cloud assistant. So the work is either done by hand, or someone
+quietly pastes confidential material into a public tool anyway.
 
-You describe the work in your own words and an agent (or a small team of them) does it:
+Citadel runs the whole loop on the organisation's own hardware, and — the part that actually
+matters — it does not ask you to trust that claim. Every authorization decision, every denial,
+and every release is recorded in a hash-chained audit log you can replay, and the sandbox's lack
+of network access is asserted by a test that tries to make an outbound call and requires it to
+fail.
 
-- **Plans** the task from your goal.
-- **Uses only what you are cleared for**: the tools and documents your identity allows.
-- **Cites every fact** back to a page and a region of the source.
-- **Writes the report you asked for**, with one section per thing you asked for, in a
-  workbench where you can edit any section yourself or send it back for revision.
-- **Runs code in a sandbox.**
-- **Hands deliverables to an approver** where a template asks for one: a Word approval
-  note, an Excel calculation, or a verified script.
+> **Status:** the MVP vertical slice is complete and runs end to end. 134 tests pass.
+> `docs/CITADEL_MVP_DESIGN.md` is the frozen contract; `docs/BUILD_LOG.md` records what each
+> build step actually produced and the decisions later steps must respect.
 
-Every model call is routed with a visible reason. Every decision lands in a hash-chained
-audit log. The sovereignty panel shows, live, that no connection left the deployment.
+---
 
-## Run it on Windows: one command
+## What it does, concretely
 
-**New machine?** Run `setup` in the repository folder first. It checks Windows, the GPU,
-Docker Desktop, Ollama, the port and the models. It offers to install or download what is
-missing, then starts Citadel and verifies it. [SETUP.md](./SETUP.md) has the same steps by
-hand, the WSL2 configuration (`setup wsl2`), and troubleshooting.
+A human submits a task in plain language. A local model plans it. A deterministic agent loop
+executes that plan, and **every tool call the agent attempts passes two independent checks**
+before anything runs. Retrieval is filtered by ACL *inside* the data plane. Code the model wrote
+runs only in a throwaway container with no network. The result is a real document, structurally
+verified, that stays unreleased until a named human approves it.
 
-You need:
+Three things are demonstrable on demand, and they are the point:
 
-- **Docker Desktop**, running.
-- **Ollama for Windows** (ollama.com). It serves the models and keeps the GPU.
-- **About 12 GB of free disk**: roughly 7 GB for the four models, the rest for the
-  container image and the database.
-- **An NVIDIA GPU with a current driver.** The demonstration is sized for an 8 GB RTX
-  5060. Without a GPU, Ollama falls back to the CPU, slowly.
-
-From the repository folder, in Command Prompt (in PowerShell, type `.\citadel`):
-
-```
-citadel            build if needed, start everything, open the browser
-citadel models     one time: download the four approved models (about 7 GB)
-```
-
-**The first `citadel` builds the image.** That takes a few minutes, because it downloads
-the Python packages and the Postgres image; later starts take seconds. The launcher then:
-
-1. Waits for the API.
-2. Tells you whether the models are in.
-3. Opens `http://127.0.0.1:8000`.
-
-**Once the models are installed, the worker ingests the demonstration corpus by itself.**
-That is sixteen documents in department folders, three of them scans, plus a later issue
-of Policy 1, and takes a few minutes. The worker waits
-for the models on purpose: scans ingested without them would be read without vision and
-indexed without embeddings, and would stay that way.
-
-| Command | What it does |
+| | What it proves |
 |---|---|
-| `citadel` | Build if needed, start, open the browser |
-| `citadel models` | `ollama pull` every model `registry/models.demo-local.yaml` approves |
-| `citadel status` | Containers, API health, missing models |
-| `citadel logs` | Follow the logs of every service |
-| `citadel stop` | Stop. Documents, results, keys and the audit log stay (Docker volumes) |
-| `citadel reset` | Stop and delete all of it (you have to type DELETE) |
+| **Happy path** | The whole loop works: plan → retrieve → compute → generate → verify → approve → release |
+| **Denial path** | An out-of-scope retrieval is refused. The capability is *valid*; policy says no. The tool never runs |
+| **Kill-switch** | An admin disables a tool; an agent holding a still-valid, unexpired token is denied on its next call |
 
-**Optional settings**, set before running:
+---
 
-- `CITADEL_PORT`: the port to serve on (default 8000).
-- `CITADEL_REQUIRE_ENFORCEMENT=1`: refuse to start if the egress ruleset cannot be applied.
-- `CITADEL_DB_PASSWORD`: the database password.
+## Quickstart
 
-## The demonstration
+**Prerequisites**
 
-Sign in as one of three seeded identities. There is no password at demonstration time
-(ADR-0001 §Q7).
+- Python 3.12
+- [Docker Desktop](https://docs.docker.com/desktop/) running (`docker version` must return a *server* version)
+- [Ollama](https://ollama.com/) with two models pulled:
+  ```bash
+  ollama pull hermes3
+  ollama pull nomic-embed-text
+  ```
 
-| Identity | Role | Clearance | Department |
-|---|---|---|---|
-| R. Kulkarni (`demo-engineer-1`) | engineer | INTERNAL | process-engineering |
-| S. Nair (`demo-engineer-2`) | engineer | CONFIDENTIAL | instrumentation |
-| V. Rangan (`demo-approver`) | approver | CONFIDENTIAL | quality-assurance |
-
-### Write a report: the workbench
-
-The **Workbench** (`#/work`) is where reports are written: a resource tree on the left,
-tabs and a command line in the middle, and observability, sandbox state and activity on
-the right ([ADR-0008](./docs/adr/0008-a-workbench-where-agents-and-people-write-reports-together.md)).
-
-1. **Ask for the report you want.** As R. Kulkarni, type in the command line:
-   `/report on lathe L-1 covering only its condition and the vendor options`. You can also
-   use the welcome tab, or `/task lathe report` to write a longer request as a file and
-   **Commit** it.
-2. **Watch it work.** The task tab shows the agent cards (click one: goal, current step,
-   completed work, tools, what it waits for), the live journal and the shared state.
-   A fuller request such as "…its condition and workload, what company policy requires
-   today, the options, and a recommendation" is split among helper agents.
-   - `/pause` pauses the task and `/steer agent_1 …` tells one agent something at its
-     next step.
-   - `/note` adds to the shared state.
-   - `/run docs.search {"query": "L-1 runout"}` runs a tool yourself, through the same
-     policy chokepoint.
-3. **Open the report.** It has exactly the sections you asked for, each paragraph cited.
-   *Web search* facts come from the offline reference library
-   ([ADR-0010](./docs/adr/0010-web-search-is-the-offline-reference-library.md)).
-4. **Change it yourself.**
-   - You can edit the title, the summary or any section, add or reorder sections, and
-     click an evidence item to cite it.
-   - **Save as v2** renders and verifies your version. A number you add without a source
-     is flagged, not hidden.
-5. **Or ask for changes.** In **Revise**, type "Add a section on operator training". The
-   agents start from your latest verified version, so your edits stay, and write v3. Every
-   version is kept, can be downloaded as .docx, and names its author in the revision
-   history.
-6. **Ask about the documents.** `/ask the difference in policy 1 between today and last
-   month` compares the two issues of Policy 1 and cites both. `/ask what is agent 2
-   doing?` answers about the work itself.
-
-What the workbench learns from finished work (outcomes, facts and approvers' comments)
-is kept by the memory manager
-([ADR-0009](./docs/adr/0009-the-memory-manager-monarchs-design-in-citadels-store.md)).
-Agents recall it before they plan, and you can read, edit and archive it in the Memory
-tab. It is filtered by department and clearance, like documents.
-
-### The five acceptance targets
-
-The **Task log** (`#/tasks`) has a one-click example goal for each target. Nothing is
-scripted behind them: the planner sees whatever goal text you submit.
-
-### B: scanned report → approval note (.docx)
-
-1. As R. Kulkarni, choose *Approval note (scan → .docx)* and submit.
-2. Follow the journal. It shows the plan, each tool call as it passes through the policy
-   chokepoint, and the evidence gathered: E1, E2… are document regions, C1… are
-   computations.
-3. The note is drafted from the approval-note template and verified in four tiers:
-   structure, schema, citations, and grounding (every number must trace to a cited block).
-   It then goes for approval.
-4. Click a citation chip. The scanned page opens with the exact region highlighted.
-   You can also preview the .docx in the browser.
-5. Sign in as V. Rangan, open *Approvals*, and approve. Or reject it with a comment, and
-   the task revises once.
-
-Approval re-renders the note with the approval block filled in, hashes it, and releases it
-with its provenance record. The person who asked for a deliverable cannot approve it.
-
-### C: code written and run in a sandbox
-
-*Sandboxed code* asks for a remaining-life calculation from the inspection readings.
-
-1. The agent writes Python.
-2. The chokepoint issues a signed, single-use receipt bound to that exact source.
-3. The sandbox verifies the receipt before running anything. The sandbox is its own
-   container, on a network with no route out.
-4. The output becomes evidence C1, and the script is kept as a verified artifact.
-
-### D: vision
-
-Scanned pages are read twice at ingest: once by OCR, and once by a vision model that reads
-stamps, signatures and filled-in fields. *Vision: read the stamp* asks who signed
-inspection report IR-2026-0147. The agent re-reads that region of the scan with the vision
-model and cites it.
-
-### A: model routing, with the reason visible
-
-Every model call in a task's journal shows which model was chosen, with each candidate's
-score: capability, task fit, quality, and residency (a loaded model beats one that has to
-be swapped in). *Models & routing* runs the same router live for planning, reasoning,
-code, vision and embedding requests. Code goes to the coder model, planning to the general
-model, and scans to the vision model.
-
-### E: zero egress, shown live
-
-*Sovereignty* shows:
-
-- **External connections observed**: the number that must read zero.
-- **Every outbound attempt** the monitor recorded.
-- **The ruleset applied** in each container.
-- **A deliberate probe**: a button that makes the API and the sandbox try to reach the
-  internet. The attempts are refused and recorded, and a running task carries on.
-
-Each task also has its own sovereignty report.
-
-The strongest version of the test comes from ADR-0004: unplug the network cable or turn
-off Wi-Fi, then run the whole flow again. Nothing degrades, because nothing was reaching
-out. What the container rules cover, and what they do not (the host, and Ollama on it), is
-written down in [ADR-0006](./docs/adr/0006-docker-desktop-launcher-and-per-container-enforcement.md),
-and the panel says it too.
-
-### Access control and audit
-
-**Access control.** *Search & access* runs one query as all three identities side by side.
-The same question returns different citations for each identity, with the denials counted.
-`ops/demo/corpus/manifest.yaml` shows who may see what.
-
-**Audit.** *Audit & policy* shows the hash-chained audit log: every policy decision (allow
-and deny), receipt, model pull, approval and release. It can verify the chain end to end.
-
-## For developers
+**Run it**
 
 ```bash
-scripts/check.sh                   # pytest + mypy --strict + ruff: "is the repo green"
-scripts/run.sh --fake-models       # the whole system without containers, with a scripted model stand-in
-scripts/run.sh                     # the same, against a real Ollama at 127.0.0.1:11434
-scripts/up.sh [up|models|status|logs|down]   # the Compose stack on Linux or WSL2 (ADR-0005)
+.\run.ps1
 ```
 
-- **Postgres-backed tests** need `scripts/dev-db.sh start` first; it prints the `PG*`
-  variables to export. Without it those tests skip instead of failing. `scripts/run.sh`
-  starts the database for you.
-- **The shell scripts need bash** (Linux or WSL2). On plain Windows, `uv run pytest`,
-  `uv run mypy --strict …` and `uv run ruff check .` work directly.
-- **After pulling changes that touch a `pyproject.toml`**, run `uv sync`; it also updates
-  `uv.lock`.
+That is the whole thing. The script creates the virtualenv if missing, installs dependencies,
+checks Docker and Ollama (naming exactly what to do if either is not ready), frees the ports if a
+previous run is still holding them, starts both processes, waits for each to report healthy, and
+opens the console.
 
-[`AGENTS.md`](./AGENTS.md) is the rulebook: the invariants, the module map and the current
-state. Read it before changing anything. Decisions are in [`docs/adr/`](./docs/adr/).
+On Linux/macOS use `./run.sh` — same behaviour.
 
-## Shape
+| | |
+|---|---|
+| `.\run.ps1 -Check` | verify prerequisites and exit |
+| `.\run.ps1 -Stop` | stop both processes |
+| `.\run.ps1 -StableSecrets` | keep sessions alive across restarts (see below) |
+| `.\run.ps1 -NoBrowser` | don't open a browser |
 
-A modular monolith plus isolated executors. The demonstration runs on **one box**
-(ADR-0004): the RTX 5060 workstation runs Ollama, Postgres, the API, the worker, the
-sandbox and everything else. Module boundaries are enforced by structural tests, so
-splitting into separate services or machines later is a deployment change, not a rewrite.
+Logs land in `var/logs/`. Then open **<http://127.0.0.1:8420/ui>**.
+
+<details>
+<summary>Starting it by hand instead</summary>
+
+Two processes, two terminals. The Execution Service is a *separate OS process* on purpose — it is
+the only thing in the system that holds a Docker socket, and that separation is the one real
+security boundary in this slice. Start it first; `python.execute` fails confusingly if nothing is
+listening for it.
+
+```bash
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+
+.venv\Scripts\python.exe -m execution_service   # terminal 1
+.venv\Scripts\python.exe -m app.main            # terminal 2
+```
+
+The per-image lists in `docker/` are deliberately narrower — `app.requirements.txt` must never
+gain the `docker` package, because the trusted zone must have no code path to a Docker socket.
+`requirements-dev.txt` is the developer machine, where both zones and the tests share one venv.
+</details>
+
+> **Signing secrets are per-process by default**, so restarting the server ends your session and
+> the console will ask you to sign in again. That is the correct fail-closed behaviour and no dev
+> secret is committed. For an uninterrupted demo, `.\run.ps1 -StableSecrets` generates them once
+> into `var/secrets.env` (gitignored) and reuses them. Development convenience only.
+
+Demo users are seeded automatically on first start:
+
+| User | Password | Role | Department |
+|---|---|---|---|
+| `j.rao` | `engineer-pw` | engineer — submits tasks | maintenance |
+| `a.singh` | `approver-pw` | approver — releases artifacts | maintenance |
+| `s.mehta` | `admin-pw` | admin — kill-switch | security |
+
+Roles are genuinely enforced. The engineer who submits work **cannot release it**, and the admin
+**cannot read any document** — they hold the kill-switch, not a master key.
+
+---
+
+## Two ways to drive it
+
+### The browser workbench — `/ui`
+
+A three-column console: agent state, corpus and tools on the left; task prompt, generated report,
+audit trace and file viewer in the centre with an embedded CLI; observability, sandbox state and
+live activity on the right.
+
+Click a file in *Resources / DB / Files* to open it — access uses the same ACL rule `rag.search`
+uses, so a document you could not retrieve through an agent is equally unreadable to you here.
+
+### The shell client
+
+```bash
+.venv\Scripts\python.exe -m cli login                       # prompts; or -u <user> -p <pass>
+.venv\Scripts\python.exe -m cli task "Identify Pump P-101's recent maintenance history and generate a short summary report." --classification CONFIDENTIAL
+.venv\Scripts\python.exe -m cli status  <task_id>
+.venv\Scripts\python.exe -m cli trace   <task_id>
+.venv\Scripts\python.exe -m cli approve <task_id>           # must be signed in as the approver
+.venv\Scripts\python.exe -m cli reject  <task_id> --comment "..."
+.venv\Scripts\python.exe -m cli admin disable-tool python.execute
+```
+
+`login` takes `-u`/`-p` for scripting; without them it prompts. The session token is cached in
+`~/.citadel/session.json` — override the location with `CITADEL_CLI_HOME`, which is handy for
+running several personas side by side.
+
+**`admin disable-tool` is one-way.** §6.8 names exactly one emergency control, so there is no
+`enable-tool` and no re-enable endpoint. The flag lives in the server process; restart it to
+clear. That is deliberate — an emergency stop you can quietly undo is not much of an emergency
+stop.
+
+---
+
+## Try the three demo paths
+
+**1. Happy path.** Sign in as `j.rao`, submit the default task, then sign in as `a.singh` and
+approve. Open the `report.md` tab — you get a real document with computed values and a source
+list. Check `trace`: an unbroken hash chain from `TASK_CREATED` to `ARTIFACT_RELEASED`.
+
+**2. Denial path.** Click *run denial-path task*. The agent asks for the Q3 finance report. Its
+capability is valid, but the finance document's ACL is disjoint from the task's department, so it
+is filtered inside the data plane and never reaches the agent — visible as `filtered_documents`
+on the `EVIDENCE_RETRIEVED` event.
+
+**3. Kill-switch.** As `s.mehta`, disable `python.execute`. Run a task as `j.rao`. The capability
+token is still valid and unexpired, and the call is still denied. The task ends:
 
 ```
-packages/    contracts platform gateway knowledge memory tools runtime deliverables sovereignty
-services/    api (HTTP + SSE + the web UI) · worker (agent loop, ingestion) · sandbox (code execution)
-registry/    models, tools, policy, roles, events, templates — data, never code
-web/         the workbench UI (no build step, no external URL)
-tests/       structural (boundary enforcement) · fakes (a scripted Ollama stand-in)
-ops/         compose (the one-box stack) · nftables · demo corpus · templates · wsl2 · hpc
-citadel.cmd  the Windows launcher
+status : FAILED
+reason : step S2 (python.execute) failed after 2 attempt(s):
+         TOOL_DISABLED tool 'python.execute' disabled by administrator
 ```
 
-## Profiles
+That is the whole reason capability and policy are kept as two separate checks — nothing had to
+be revoked and no token had to be hunted down; the policy layer simply answers differently.
+Restart the server to clear the flag.
 
-| | `demo-local` | `hpc-eval` |
+---
+
+## Architecture in one screen
+
+```
+  Engineer / Approver / Admin
+            │
+        CLI  or  /ui
+            │
+┌───────────▼──────────────────────────────────────────┐
+│ TRUSTED WORKFLOW ZONE — one FastAPI process          │
+│                                                      │
+│  Query Router → Orchestrator (PLAN→ACT→OBSERVE)      │
+│                      │                               │
+│                      ▼                               │
+│               TOOL GATEWAY  ← the only way to a tool │
+│                 A. verify capability (local)         │
+│                 B. policy decision (this resource)   │
+│                 C. route to backend                  │
+│                      │                               │
+│    ┌─────────────────┼──────────────────┐            │
+│    ▼                 ▼                  ▼            │
+│  rag.search    python.execute    generate_report     │
+│  ACL-filtered        │           → Verifier          │
+│  in the data plane   │           → human approval    │
+└──────────────────────┼───────────────────────────────┘
+                       │ HTTP  (no Docker socket here)
+┌──────────────────────▼───────────────────────────────┐
+│ ISOLATED EXECUTION ZONE — separate OS process        │
+│   Execution Service — the only Docker-socket holder  │
+│     └─ one-shot container: no socket, no host mount, │
+│        NO NETWORK, cpu/memory/pids caps, destroyed   │
+└──────────────────────────────────────────────────────┘
+```
+
+Everything is recorded by a **single serializing writer** into a SHA-256 hash chain. `append_event`
+is the only code path that writes the event table, and a test greps the source tree to keep it
+that way.
+
+For the full walkthrough of what happens on a single task — every function, in order — see
+**[docs/WORKFLOW.md](docs/WORKFLOW.md)**.
+
+---
+
+## The security model, briefly
+
+**Capability ≠ policy, deliberately.** A capability token proves *"this agent may attempt
+`rag.search` in general"* — it is signed HMAC-SHA256, scoped to one operation and one task/agent
+pair, and lives 5 minutes. Policy decides *"is THIS specific document allowed, right now"*, and
+runs on every single call. Most agent frameworks collapse these into one check. Keeping them
+apart is what makes the kill-switch work against tokens that are already issued and still valid.
+
+**The policy engine is four ordered rules, first match wins, default DENY.** Not a rules engine,
+not a DSL — that generality is explicitly deferred. Read it in `app/policy/engine.py`; it is
+short on purpose.
+
+**Filtering happens inside the data plane.** A document you may not see is never built into a
+result and then dropped — it never enters the candidate list at all.
+
+**Identity always comes from the verified session JWT.** A `user_id` or `approver_id` in a request
+body is ignored, on every endpoint, without exception.
+
+---
+
+## Testing
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/ -q
+```
+
+**134 passed** with Docker and Ollama available. Tests that need a live daemon skip cleanly with a
+clear reason when it is absent — so *check for skips before believing a green run*.
+
+Per-step demo scripts print what they prove rather than asserting it silently:
+
+```bash
+.venv\Scripts\python.exe -m tests.demos.step4_security      # ALLOW + all four DENY paths
+.venv\Scripts\python.exe -m tests.demos.step5_execution     # sandbox, and the no-network proof
+.venv\Scripts\python.exe -m tests.demos.step6_rag           # ACL-filtered retrieval
+.venv\Scripts\python.exe -m tests.demos.step7_orchestrator  # a real end-to-end task
+.venv\Scripts\python.exe -m tests.demos.step8_artifact      # generate → verify → approve
+```
+
+---
+
+## Configuration
+
+Everything is environment-driven. Nothing needs setting for a local run.
+
+| Variable | Default | Notes |
 |---|---|---|
-| Role | **The demonstration.** Sovereign. | **A measuring instrument.** Never sovereign. |
-| Hardware | RTX 5060, 8 GB, single box | University HPC, DGX-H200 via SLURM |
-| Runtime | Ollama | vLLM |
-| Corpus | Real | Synthetic only, enforced at ingest |
+| `CITADEL_DATABASE_URL` | `sqlite:///var/citadel.db` | Point at PostgreSQL and nothing else changes |
+| `CITADEL_SERVER_PORT` | `8420` | Trusted-zone API and `/ui` |
+| `CITADEL_EXECUTION_SERVICE_URL` | `http://127.0.0.1:8901` | Where the trusted zone reaches the sandbox |
+| `CITADEL_SESSION_SECRET` | *random per process* | **Unset means a restart invalidates every session.** Set it for anything long-lived |
+| `CITADEL_CAPABILITY_SECRET` | *random per process* | Deliberately separate from the session secret |
+| `CITADEL_OLLAMA_URL` | `http://localhost:11434` | Local inference only |
 
-**Design to `demo-local`, and demonstrate on it too.** The problem statement asks for a
-single workstation with a mid-range GPU, so that is the product. `hpc-eval` benchmarks
-models and runs the eval harness. It is never on the demonstration path, and acceptance
-target E is never shown there (ADR-0003).
+No development secret is committed. If the signing variables are unset, a random per-process key
+is generated — so a restart invalidates outstanding tokens. That is the fail-closed failure mode;
+a checked-in "dev secret" is the one that reaches production by accident.
 
-## Not done yet
+---
 
-- **Two sandbox-driven substitutions still stand**: Starlette + uvicorn instead of
-  FastAPI, and hand-written HTML/CSS/JS instead of Vite + React (`services/AGENTS.md`,
-  `web/AGENTS.md`).
-- **Deliverables** are .docx and .xlsx. PowerPoint is not built.
-- **Report writing has been walked end to end with the scripted stand-in model**, in a
-  browser. How well the local models follow the section instructions is to be measured
-  on the real card, alongside structured-output conformance.
-- **The M1 measurements on the real card have not been run**: resident-set VRAM, swap
-  cost, and structured-output conformance per model. The registry's figures are estimates
-  and say so.
-- **Not built**: the offline install drill (PLAN-M0 task 14), the two-box Compose
-  override, and the host-level ruleset for a WSL2 distro (ADR-0006).
-- **The Compose stack has not yet run on a real Docker daemon.** It was built where no
-  Docker daemon could run. There, the process model was exercised in network namespaces:
-  the users, capabilities, egress ruleset, environment and service order, with every
-  flow walked end to end. The first real `docker compose up` happens on your machine. If
-  the egress ruleset cannot be applied there, the sovereignty panel says so in words.
-- **Demonstration sign-in has no password.**
+## What this slice deliberately does not build
 
-## Related repositories
+Kubernetes, Kafka, Redis, a policy DSL, a multi-agent framework, Docker-socket access for agents,
+direct agent writes to shared state, internet access for the execution zone, an LLM-as-judge
+verifier, or a production dashboard. Each maps to a documented `DEFERRED` or `NOT_APPLICABLE` row
+in the design doc's closure matrix — none is an accidental omission.
 
-- `AI_WORKBENCH/MONARCH` is a local assistant's memory. Citadel implements its memory
-  manager's design in its own Postgres store, with classification and ACL on every memory
-  (ADR-0009). There is no code dependency and no merge.
-- `AI_WORKBENCH/CITADEL` is the prototype: a quarry, not a baseline. `contracts/` was
-  worth porting; most of the rest is documented in `AGENTS.md` as failure modes with names.
+Known limitations, stated plainly rather than buried:
+
+- The control plane shares a process with the orchestrator. A compromised orchestrator could in
+  principle bypass the in-process policy call. The boundary that *is* real is the one around code
+  execution, because that is the only place adversarial content runs.
+- Artifact immutability is enforced at the API layer, not by write-once storage.
+- One agent per task — `Agent.task_id` is UNIQUE by schema. Multi-agent is a deliberate Phase-2
+  decision, not an oversight.
+- The local user table stands in for LDAP/AD, and there is no capability revocation list; the
+  5-minute TTL plus the independently-enforced kill-switch cover it for this slice.
+
+---
+
+## Repository layout
+
+```
+app/
+  identity/      login, bcrypt, session JWT
+  capability/    scoped 5-minute capability tokens
+  policy/        the four-rule engine + the one kill-switch
+  tool_gateway/  the single authorization chokepoint
+  rag/           ingestion with mandatory ACL sidecars, filtered retrieval
+  execution/     HTTP client to the sandbox (imports no docker)
+  orchestrator/  task intake, planning, the agent loop
+  model_router/  static model selection + the Ollama client
+  artifact/      template, Verifier, artifact read
+  approval/      the one transactional release endpoint
+  observability/ the single serializing hash-chain writer
+  ui/            the browser workbench
+execution_service/  the isolated zone — the only module importing docker
+cli/             the shell client
+data/            demo corpus, each file with a mandatory .meta.json sidecar
+docs/            the frozen design contract, build log, and workflow guide
+```
+
+---
+
+## Documentation
+
+- **[docs/WORKFLOW.md](docs/WORKFLOW.md)** — what happens on one task, step by step through the code
+- **[docs/CITADEL_MVP_DESIGN.md](docs/CITADEL_MVP_DESIGN.md)** — the frozen contract every component implements
+- **[docs/BUILD_LOG.md](docs/BUILD_LOG.md)** — what each build step produced, and the decisions later steps must respect
+- **[AGENTS.md](AGENTS.md)** — build order and the subagent that owns each slice

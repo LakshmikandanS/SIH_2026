@@ -1,0 +1,61 @@
+# Two trust zones, not one, and not five (design doc §2).
+#
+#   trusted_zone       -- the app service's own network. Reserved for the
+#                          trusted workflow zone's own backing stores
+#                          (Postgres / a vector store, added by later steps).
+#                          `execution-service` is NOT attached to it, so it
+#                          has no route to whatever lands here.
+#   execution_channel   -- the ONLY network `execution-service` is attached
+#                          to. `app` talks to it here over HTTP, on the
+#                          network the sandbox containers `execution-service`
+#                          spawns are never joined to at all (they are
+#                          created with `network_disabled=True` and have no
+#                          network interface whatsoever -- see
+#                          execution_service/sandbox.py).
+#
+# `execution-service` is the only service in this file that mounts
+# `/var/run/docker.sock`. Nothing else in this compose file, and nothing
+# under `app/`, may do that.
+#
+# Run:
+#   docker compose up --build
+#
+# This file demonstrates the topology; the demo/test suite in this repo runs
+# the Execution Service directly (`python -m execution_service`) against the
+# host's Docker daemon rather than requiring compose, so it works the same
+# way on a bare Docker Desktop install (see tests/test_execution.py).
+
+networks:
+  trusted_zone:
+    driver: bridge
+  execution_channel:
+    driver: bridge
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    networks:
+      - trusted_zone
+      - execution_channel
+    environment:
+      CITADEL_EXECUTION_SERVICE_URL: "http://execution-service:8901"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - execution-service
+    # No `volumes:` entry mounts a Docker socket here, deliberately -- see
+    # tests/test_security.py::test_execution_zone_has_no_code_path_to_the_docker_socket.
+
+  execution-service:
+    build:
+      context: .
+      dockerfile: docker/execution-service.Dockerfile
+    networks:
+      - execution_channel
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CITADEL_EXECUTION_HOST: "0.0.0.0"
+      CITADEL_EXECUTION_PORT: "8901"

@@ -1,0 +1,7 @@
+{
+  "classification": "INTERNAL",
+  "acl": ["maintenance", "engineering"],
+  "department": "maintenance",
+  "document_id": "DOC-P101-SPEC",
+  "document_version": "1"
+}

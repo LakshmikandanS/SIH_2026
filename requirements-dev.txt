@@ -1,0 +1,31 @@
+# Everything needed to run Citadel and its test suite from a checkout.
+#
+# The per-image lists in `docker/` are deliberately narrower and must stay that
+# way: `docker/app.requirements.txt` must never gain the `docker` package, because
+# the trusted zone holds no Docker socket and must have no code path to one
+# (tests/test_security.py::test_execution_zone_has_no_code_path_to_the_docker_socket).
+#
+# This file is for a developer machine, where both zones and the tests all run
+# from one virtualenv.
+
+# --- trusted workflow zone ---
+fastapi==0.141.1
+uvicorn==0.52.4
+sqlalchemy==2.0.52
+pydantic==2.13.5
+pyjwt==2.13.0
+# Ed25519 signing for contracts/receipts.py (P1 §2) -- PyJWT's EdDSA algorithm
+# needs it. New as of P1 step 1; nothing before P1 required it.
+cryptography==46.0.7
+bcrypt==5.0.0
+httpx==0.28.1
+
+# --- isolated execution zone (the only place `docker` belongs) ---
+docker==7.2.0
+
+# --- the citadel CLI ---
+typer==0.27.2
+rich==15.0.0
+
+# --- tests ---
+pytest==9.1.1

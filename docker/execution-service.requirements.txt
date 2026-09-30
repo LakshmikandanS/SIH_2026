@@ -1,0 +1,11 @@
+# Execution Service image dependencies (design doc §2).
+#
+# Deliberately separate from the trusted zone's dependency set
+# (`docker/app.requirements.txt`): this is the ONE image in the whole system
+# allowed to depend on the `docker` package, because it is the one process
+# allowed to hold a Docker socket.
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+docker==7.2.0
+requests==2.34.2

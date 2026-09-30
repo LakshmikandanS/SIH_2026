@@ -1,0 +1,18 @@
+# Trusted workflow zone image dependencies (design doc §2).
+#
+# The `docker` package must NEVER appear in this list -- the trusted zone
+# holds no Docker socket and must have no code path that could reach one
+# (tests/test_security.py::test_execution_zone_has_no_code_path_to_the_docker_socket).
+#
+# This mirrors the packages installed directly into .venv/ as of step 4 plus
+# `httpx`, which step 5 adds so `app/execution/backend.py` can call the
+# Execution Service over HTTP. Steps 6-9 will extend this file as they add
+# their own dependencies (a vector store client, a model client, etc.) --
+# that is expected and does not change anything step 5 built.
+fastapi==0.141.1
+uvicorn==0.52.4
+sqlalchemy==2.0.52
+pydantic==2.13.5
+pyjwt==2.13.0
+bcrypt==5.0.0
+httpx==0.28.1

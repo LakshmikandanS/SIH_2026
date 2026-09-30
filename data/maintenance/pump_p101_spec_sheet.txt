@@ -1,0 +1,25 @@
+PUMP P-101 — EQUIPMENT SPECIFICATION SHEET
+Asset ID: PMP-P101
+Revision: C (2024-08-01)
+
+Service:              Cooling water circulation, Loop B
+Type:                 Horizontal centrifugal, single stage
+Manufacturer:         Ingersoll Fluid Systems
+Model:                CF-4400
+Impeller diameter:    240 mm
+Rated flow:           180 m3/h at 42 m head
+Rated speed:          2950 rpm
+Motor:                45 kW, 400 V, 3-phase
+Full-load current:    43.0 A nominal
+
+MAINTENANCE LIMITS
+
+Vibration alarm:      4.5 mm/s RMS
+Vibration trip:       7.1 mm/s RMS
+Wear ring clearance:  0.55 mm replacement limit
+Seal type:            Cartridge mechanical, P/N 44-2201
+Flush plan:           API Plan 11
+Service interval:     2000 operating hours
+
+The 2000-hour interval is a manufacturer recommendation and is
+superseded by any condition-based trigger reached earlier.
